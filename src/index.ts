@@ -7,7 +7,7 @@ const program = new Command();
 
 program
   .name("viz-cli")
-  .description("Analyze React/Next.js projects and generate Mermaid architecture diagrams")
+  .description("Analyze projects and generate architecture diagrams")
   .version("0.1.0");
 
 program

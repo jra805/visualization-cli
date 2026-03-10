@@ -5,7 +5,8 @@ export type IssueType =
   | "orphan-module"
   | "high-coupling"
   | "god-module"
-  | "prop-drilling";
+  | "prop-drilling"
+  | "layering-violation";
 
 export interface Issue {
   type: IssueType;
@@ -14,6 +15,13 @@ export interface Issue {
   files: string[];
 }
 
+export type ArchitecturePattern =
+  | "layered"
+  | "mvc"
+  | "hexagonal"
+  | "modular"
+  | "unknown";
+
 export interface ArchReport {
   totalModules: number;
   totalEdges: number;
@@ -21,4 +29,5 @@ export interface ArchReport {
   circularDeps: string[][];
   orphans: string[];
   topCoupled: { file: string; fanIn: number; fanOut: number }[];
+  architecturePattern?: ArchitecturePattern;
 }

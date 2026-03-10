@@ -32,8 +32,11 @@ export async function analyzeCommand(
       focus: options.focus,
       depth: options.depth,
     });
+    const langSummary = scanResult.languages.length > 0
+      ? scanResult.languages.map((l) => `${l.language}(${l.fileCount})`).join(", ")
+      : "unknown";
     scanSpinner.succeed(
-      `Found ${scanResult.files.length} files (${scanResult.framework}${scanResult.hasTypeScript ? " + TypeScript" : ""})`
+      `Found ${scanResult.files.length} files [${langSummary}] (${scanResult.framework}${scanResult.hasTypeScript ? " + TypeScript" : ""})`
     );
   } catch (error) {
     scanSpinner.fail("Scan failed");
@@ -42,7 +45,7 @@ export async function analyzeCommand(
   }
 
   if (scanResult.files.length === 0) {
-    console.log(chalk.yellow("No source files found. Is this a JS/TS project?"));
+    console.log(chalk.yellow("No source files found. Is this a supported project?"));
     process.exit(0);
   }
 

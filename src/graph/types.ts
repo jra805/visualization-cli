@@ -1,9 +1,13 @@
+import type { Language } from "../scanner/types.js";
+
 export type ModuleType =
   // Frontend presentation
   | "component"
   | "page"
   | "layout"
   | "directive"
+  | "view"
+  | "template"
   // Frontend logic
   | "hook"
   | "composable"
@@ -13,6 +17,7 @@ export type ModuleType =
   | "controller"
   | "api-route"
   | "route-config"
+  | "handler"
   // Backend middleware
   | "middleware"
   | "guard"
@@ -26,6 +31,7 @@ export type ModuleType =
   | "entity"
   | "dto"
   | "migration"
+  | "schema"
   // Infrastructure
   | "config"
   | "entry-point"
@@ -45,6 +51,7 @@ export interface GraphNode {
   moduleType: ModuleType;
   loc: number;
   directory: string;
+  language?: Language;
 }
 
 export interface Edge {

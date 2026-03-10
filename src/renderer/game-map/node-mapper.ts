@@ -79,6 +79,11 @@ const MODULE_COLORS: Record<string, { main: string; dark: string }> = {
   util:         { main: "#7080A8", dark: "#405078" },
   decorator:    { main: "#9870D0", dark: "#6840A0" },
   serializer:   { main: "#709048", dark: "#486020" },
+  // New multi-language types
+  view:         { main: "#4A7AE8", dark: "#2850A8" },  // same as component (presentation)
+  handler:      { main: "#E88030", dark: "#B85810" },  // same as controller (interface)
+  schema:       { main: "#3898C0", dark: "#186888" },  // same as config (infrastructure)
+  template:     { main: "#5878D0", dark: "#3050A0" },  // same as directive (presentation)
   // Test & fallback — muted but visible
   test:         { main: "#606878", dark: "#404850" },
   unknown:      { main: "#585E70", dark: "#383E50" },
@@ -113,6 +118,10 @@ const LOCATION_NAMES: Record<string, Record<string, string>> = {
   util:         { small: "Toolshed",      medium: "Workshop",     large: "Master Forge" },
   decorator:    { small: "Sigil",         medium: "Rune Chamber", large: "Inscription Hall" },
   serializer:   { small: "Scroll",        medium: "Translator",   large: "Bureau of Records" },
+  view:         { small: "Lookout",        medium: "Watchtower",   large: "Observatory" },
+  handler:      { small: "Guard Post",    medium: "Gatehouse",    large: "Fortress Gate" },
+  schema:       { small: "Blueprint",     medium: "Drafting Hall", large: "Design Bureau" },
+  template:     { small: "Pattern Book",  medium: "Print Shop",   large: "Publishing House" },
   test:         { small: "Training Grounds", medium: "Arena",     large: "Colosseum" },
   unknown:      { small: "Ruins",         medium: "Mystery",      large: "Forbidden Citadel" },
 };
@@ -121,11 +130,13 @@ const LOCATION_NAMES: Record<string, Record<string, string>> = {
 const MODULE_BIOME: Record<string, BiomeType> = {
   // UI components — forest villages
   component: "forest", page: "forest", layout: "forest", directive: "forest",
+  view: "forest", template: "forest",
   // Hooks & config — enchanted crystal groves
   hook: "crystal", composable: "crystal", context: "crystal", config: "crystal",
+  schema: "crystal",
   // API/controllers — coastal port towns (data harbors)
   "api-route": "coastal", controller: "coastal", "route-config": "coastal",
-  interceptor: "coastal", middleware: "coastal",
+  interceptor: "coastal", middleware: "coastal", handler: "coastal",
   // Data layer — mountain mining camps (mining data)
   repository: "mountain", model: "mountain", entity: "mountain",
   dto: "mountain", migration: "mountain", serializer: "mountain",

@@ -5,6 +5,28 @@ import type { ModuleType } from "../graph/types.js";
 const RULES: { test: (lower: string, original: string) => boolean; type: ModuleType }[] = [
   // ── Test (highest priority) ──
   { test: (l) => /\.(test|spec)\./.test(l) || l.includes("__tests__"), type: "test" },
+  // Python tests
+  { test: (l) => /\/_?test[_s]?\//.test(l) || /_test\.py$/.test(l) || /test_\w+\.py$/.test(l), type: "test" },
+  // Go tests
+  { test: (l) => /_test\.go$/.test(l), type: "test" },
+  // Java/Kotlin tests
+  { test: (l) => /test\.java$/.test(l) || /spec\.java$/.test(l) || /test\.kt$/.test(l), type: "test" },
+  // Rust tests
+  { test: (l) => /_test\.rs$/.test(l) || /\/tests\//.test(l), type: "test" },
+  // C# tests
+  { test: (l) => /tests?\.cs$/.test(l) || /\/tests?\//.test(l), type: "test" },
+  // Ruby tests
+  { test: (l) => /_test\.rb$/.test(l) || /_spec\.rb$/.test(l) || /\/spec\//.test(l), type: "test" },
+
+  // ── Schema files (cross-language) ──
+  { test: (l) => l.endsWith(".proto"), type: "schema" },
+  { test: (l) => l.endsWith(".graphql") || l.endsWith(".gql"), type: "schema" },
+  { test: (l) => l.endsWith("schema.prisma"), type: "schema" },
+
+  // ── Template files ──
+  { test: (l) => l.endsWith(".html") || l.endsWith(".jinja2") || l.endsWith(".jinja"), type: "template" },
+  { test: (l) => l.endsWith(".blade.php") || l.endsWith(".erb") || l.endsWith(".ejs"), type: "template" },
+  { test: (l) => l.includes("/templates/") || l.includes("/views/") && l.endsWith(".html"), type: "template" },
 
   // ── Framework-specific suffix patterns (high confidence) ──
   { test: (l) => /\.controller\.[tj]sx?$/.test(l), type: "controller" },
@@ -24,10 +46,56 @@ const RULES: { test: (lower: string, original: string) => boolean; type: ModuleT
   { test: (l) => /\.composable\.[tj]sx?$/.test(l), type: "composable" },
   { test: (l) => /\.module\.[tj]s$/.test(l), type: "config" }, // NestJS/Angular modules
 
+  // ── Java/Kotlin suffix patterns ──
+  { test: (l) => /controller\.java$/.test(l) || /controller\.kt$/.test(l), type: "controller" },
+  { test: (l) => /service\.java$/.test(l) || /service\.kt$/.test(l), type: "service" },
+  { test: (l) => /repository\.java$/.test(l) || /repository\.kt$/.test(l), type: "repository" },
+  { test: (l) => /entity\.java$/.test(l) || /entity\.kt$/.test(l), type: "entity" },
+  { test: (l) => /config\.java$/.test(l) || /configuration\.java$/.test(l), type: "config" },
+  { test: (l) => /application\.java$/.test(l), type: "entry-point" },
+
+  // ── Rust entry points ──
+  { test: (l) => /\/src\/main\.rs$/.test(l), type: "entry-point" },
+  { test: (l) => /\/src\/lib\.rs$/.test(l), type: "entry-point" },
+  { test: (l) => /\/mod\.rs$/.test(l), type: "config" },
+
+  // ── Python patterns ──
+  { test: (l) => /views\.py$/.test(l) || /\/views\//.test(l) && l.endsWith(".py"), type: "view" },
+  { test: (l) => /urls\.py$/.test(l), type: "route-config" },
+  { test: (l) => /models\.py$/.test(l) || /\/models\//.test(l) && l.endsWith(".py"), type: "model" },
+  { test: (l) => /serializers\.py$/.test(l) || /\/serializers\//.test(l) && l.endsWith(".py"), type: "serializer" },
+  { test: (l) => /forms\.py$/.test(l), type: "validator" },
+  { test: (l) => /admin\.py$/.test(l), type: "config" },
+  { test: (l) => /tasks\.py$/.test(l), type: "service" },
+  { test: (l) => /manage\.py$/.test(l) || /wsgi\.py$/.test(l) || /asgi\.py$/.test(l), type: "entry-point" },
+  { test: (l) => /\/migrations\//.test(l) && l.endsWith(".py"), type: "migration" },
+
+  // ── Go patterns ──
+  { test: (l) => /\/handlers?\//.test(l) && l.endsWith(".go") || /_handler\.go$/.test(l), type: "handler" },
+  { test: (l) => /\/middleware\//.test(l) && l.endsWith(".go"), type: "middleware" },
+  { test: (l) => /\/models?\//.test(l) && l.endsWith(".go"), type: "model" },
+  { test: (l) => /\/repositor(y|ies)\//.test(l) && l.endsWith(".go") || /\/repo\//.test(l) && l.endsWith(".go"), type: "repository" },
+  { test: (l) => /cmd\/.*\/main\.go$/.test(l), type: "entry-point" },
+
+  // ── C# patterns ──
+  { test: (l) => /controller\.cs$/.test(l), type: "controller" },
+  { test: (l) => /service\.cs$/.test(l), type: "service" },
+  { test: (l) => /repository\.cs$/.test(l), type: "repository" },
+  { test: (l) => /program\.cs$/.test(l) || /startup\.cs$/.test(l), type: "entry-point" },
+
+  // ── PHP patterns ──
+  { test: (l) => /controller\.php$/.test(l), type: "controller" },
+  { test: (l) => /\/app\/models\//.test(l) && l.endsWith(".php"), type: "model" },
+
+  // ── Ruby patterns ──
+  { test: (l) => /controller\.rb$/.test(l) || /\/controllers\//.test(l) && l.endsWith(".rb"), type: "controller" },
+  { test: (l) => /\/models\//.test(l) && l.endsWith(".rb"), type: "model" },
+  { test: (l) => /config\.ru$/.test(l) || /\/bin\/rails/.test(l), type: "entry-point" },
+
   // ── Migration files ──
   { test: (l) => /\/migrations?\//.test(l), type: "migration" },
 
-  // ── Directory-based patterns ──
+  // ── Directory-based patterns (JS/TS) ──
   { test: (l) => /\/controllers?\//.test(l), type: "controller" },
   { test: (l) => /\/services?\//.test(l), type: "service" },
   { test: (l) => /\/middlewares?\//.test(l), type: "middleware" },

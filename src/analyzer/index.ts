@@ -5,6 +5,8 @@ import { detectCircularDeps } from "./circular.js";
 import { detectOrphans } from "./orphans.js";
 import { analyzeCoupling } from "./coupling.js";
 import { detectPropDrilling } from "./react-patterns.js";
+import { detectLayeringViolations } from "./layer-detector.js";
+import { detectArchitecturePattern } from "./architecture-patterns.js";
 
 export interface AnalyzeOptions {
   skipIssues?: boolean;
@@ -29,10 +31,13 @@ export function analyze(
     issues.push(...couplingIssues);
 
     issues.push(...detectPropDrilling(components, graph));
+
+    issues.push(...detectLayeringViolations(graph));
   }
 
   const { scores } = analyzeCoupling(graph);
   const { orphans } = detectOrphans(graph, entryPoints);
+  const architecturePattern = detectArchitecturePattern(graph);
 
   return {
     totalModules: graph.nodes.size,
@@ -41,6 +46,7 @@ export function analyze(
     circularDeps,
     orphans,
     topCoupled: scores.slice(0, 10),
+    architecturePattern,
   };
 }
 
