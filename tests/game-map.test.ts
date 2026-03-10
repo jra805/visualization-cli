@@ -223,8 +223,8 @@ describe("game-map", () => {
       expect(html).toContain("game-data");
       expect(html).toContain("REALM MAP");
       expect(html).toContain("Kingdom Overview");
-      expect(html).toContain("Command Chain");
-      expect(html).toContain("Supply Lines");
+      expect(html).toContain("Trade Routes");
+      expect(html).toContain("Strongholds");
       expect(html).toContain("Threat Map");
     });
 

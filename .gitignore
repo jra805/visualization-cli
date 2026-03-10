@@ -2,7 +2,7 @@ node_modules/
 dist/
 viz-output/
 viz-output-*/
+test-output/
 *.tsbuildinfo
 .claude/bash_allow.json
-.gitignore
 .claude/settings.local.json
