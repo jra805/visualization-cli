@@ -29,6 +29,7 @@ const EXPECTED_STANDALONE: ReadonlySet<ModuleType> = new Set([
 const NEXTJS_CONVENTION_FILES = new Set([
   "loading", "error", "not-found", "global-error",
   "template", "default", "sitemap", "robots", "opengraph-image",
+  "route", "middleware", "instrumentation",
 ]);
 
 function isConventionFile(filePath: string): boolean {
