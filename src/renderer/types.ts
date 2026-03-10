@@ -4,4 +4,4 @@ export interface RenderOptions {
   format?: OutputFormat;
 }
 
-export type OutputFormat = "mermaid" | "interactive" | "terminal";
+export type OutputFormat = "mermaid" | "interactive" | "terminal" | "game";

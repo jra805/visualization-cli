@@ -8,6 +8,7 @@ import type { RenderOptions } from "./types.js";
 import { generateMermaidDiagrams } from "./mermaid/index.js";
 import { generateHtml } from "./html.js";
 import { generateInteractiveHtml } from "./interactive-html.js";
+import { generateGameMapHtml } from "./game-map/index.js";
 
 export async function render(
   graph: Graph,
@@ -25,6 +26,10 @@ export async function render(
     const diagrams = generateMermaidDiagrams(graph, report, components, dataFlows);
     const html = generateHtml(diagrams, report);
     outputPath = path.join(options.outputDir, "architecture.html");
+    fs.writeFileSync(outputPath, html, "utf-8");
+  } else if (format === "game") {
+    const html = generateGameMapHtml(graph, report, components, dataFlows);
+    outputPath = path.join(options.outputDir, "game-map.html");
     fs.writeFileSync(outputPath, html, "utf-8");
   } else {
     const html = generateInteractiveHtml(graph, report, components, dataFlows);

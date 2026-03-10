@@ -1,14 +1,41 @@
 export type ModuleType =
+  // Frontend presentation
   | "component"
-  | "hook"
-  | "util"
   | "page"
-  | "api-route"
-  | "store"
-  | "test"
   | "layout"
+  | "directive"
+  // Frontend logic
+  | "hook"
+  | "composable"
+  | "store"
   | "context"
+  // Backend entry
+  | "controller"
+  | "api-route"
+  | "route-config"
+  // Backend middleware
+  | "middleware"
+  | "guard"
+  | "interceptor"
+  | "validator"
+  // Backend business
+  | "service"
+  // Data
+  | "repository"
+  | "model"
+  | "entity"
+  | "dto"
+  | "migration"
+  // Infrastructure
+  | "config"
+  | "entry-point"
+  // Cross-cutting
   | "type"
+  | "util"
+  | "decorator"
+  | "serializer"
+  // Test & fallback
+  | "test"
   | "unknown";
 
 export interface GraphNode {

@@ -85,7 +85,7 @@ export async function analyzeCommand(
       parseResult.parseResult.dataFlows,
       { outputDir, verbose: options.verbose, format: options.format }
     );
-    const filename = options.format === "mermaid" ? "architecture.html" : "interactive.html";
+    const filename = options.format === "mermaid" ? "architecture.html" : options.format === "game" ? "game-map.html" : "interactive.html";
     renderSpinner.succeed(
       `Visualization opened in browser → ${chalk.cyan(outputDir + "/" + filename)}`
     );
