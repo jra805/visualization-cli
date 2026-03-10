@@ -32,6 +32,8 @@ export interface GameLocation {
   isOrphan: boolean;
   isCircular: boolean;
   isGodModule: boolean;
+  isHotspot: boolean;
+  hotspotScore: number;
   isBridge: boolean;
   community: number;
   layer: number;
@@ -208,6 +210,8 @@ export function mapNodesToLocations(
       isOrphan: d.isOrphan,
       isCircular: d.isCircular,
       isGodModule: d.isGodModule,
+      isHotspot: d.isHotspot ?? false,
+      hotspotScore: d.hotspotScore ?? 0,
       isBridge,
       community,
       layer,

@@ -1,5 +1,6 @@
 import type { Graph } from "../../graph/types.js";
 import type { ArchReport } from "../../analyzer/types.js";
+import type { GroupedGraph } from "../../graph/grouping.js";
 
 const MODULE_COLORS: Record<string, string> = {
   component: "#4A90D9",
@@ -34,8 +35,31 @@ export function renderDependencyGraph(graph: Graph, report: ArchReport): string 
       .map((c) => c.file)
   );
 
-  // Add nodes with styles
+  // Check for grouping
+  const grouped = (graph as GroupedGraph).groups;
+  const nodeMembership = (graph as GroupedGraph).nodeMembership;
+  const groupedNodeIds = new Set<string>();
+
+  // Add grouped nodes inside subgraphs
+  if (grouped && grouped.size > 0) {
+    for (const [groupId, info] of grouped) {
+      const safeGroupId = sanitizeId(groupId);
+      lines.push(`  subgraph ${safeGroupId}["${info.label}"]`);
+      for (const memberId of info.memberIds) {
+        const node = graph.nodes.get(memberId);
+        if (node) {
+          lines.push(`    ${sanitizeId(memberId)}["${node.label}"]`);
+          groupedNodeIds.add(memberId);
+        }
+      }
+      lines.push(`  end`);
+    }
+    lines.push("");
+  }
+
+  // Add ungrouped nodes
   for (const [id, node] of graph.nodes) {
+    if (groupedNodeIds.has(id)) continue;
     const safeId = sanitizeId(id);
     const label = node.label;
     lines.push(`  ${safeId}["${label}"]`);
@@ -76,6 +100,18 @@ export function renderDependencyGraph(graph: Graph, report: ArchReport): string 
   for (const file of highCouplingNodes) {
     if (graph.nodes.has(file)) {
       lines.push(`  style ${sanitizeId(file)} stroke:#E67E22,stroke-width:3px`);
+    }
+  }
+
+  // Temporal coupling edges (dotted amber arrows with count label)
+  if (report.temporalCouplings) {
+    lines.push("");
+    for (const tc of report.temporalCouplings) {
+      if (graph.nodes.has(tc.fileA) && graph.nodes.has(tc.fileB)) {
+        const sourceId = sanitizeId(tc.fileA);
+        const targetId = sanitizeId(tc.fileB);
+        lines.push(`  ${sourceId} -. "${tc.coChangeCount}x" .-> ${targetId}`);
+      }
     }
   }
 

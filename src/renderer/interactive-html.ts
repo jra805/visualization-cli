@@ -212,6 +212,32 @@ export function generateInteractiveHtml(
     0%, 100% { box-shadow: 0 0 4px #CF5C5C; }
     50% { box-shadow: 0 0 16px #CF5C5C; }
   }
+
+  .lens-bar {
+    display: flex;
+    gap: 0;
+    padding: 0 20px;
+    border-bottom: 1px solid #21262d;
+    flex-shrink: 0;
+    background: #0d1117;
+  }
+
+  .lens-btn {
+    padding: 5px 12px;
+    font-size: 10px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: #6B7280;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .lens-btn:hover { color: #c9d1d9; }
+  .lens-btn.active { color: #d2a8ff; border-bottom-color: #d2a8ff; }
 </style>
 </head>
 <body>
@@ -234,6 +260,13 @@ export function generateInteractiveHtml(
   <button class="tab" data-view="issues">Issues</button>
 </div>
 
+<div class="lens-bar">
+  <button class="lens-btn active" data-lens="dependencies">Dependencies</button>
+  <button class="lens-btn" data-lens="complexity">Complexity</button>
+  <button class="lens-btn" data-lens="hotspots">Hotspots</button>
+  <button class="lens-btn" data-lens="languages">Languages</button>
+</div>
+
 <div class="main">
   <div id="cy"></div>
   <div class="inspector" id="inspector">
@@ -242,16 +275,7 @@ export function generateInteractiveHtml(
   </div>
 </div>
 
-<div class="footer">
-  <div class="legend-item"><div class="legend-dot" style="background:#5B8DD9"></div> Component</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#4CAF7D"></div> Hook</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#8E99A4"></div> Util</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#9B6BB0"></div> Page</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#D4854A"></div> API Route</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#CF5C5C"></div> Store</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#45B5AA"></div> Context</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#A0A8B0"></div> Type</div>
-</div>
+<div class="footer" id="legend"></div>
 
 <script id="viz-data" type="application/json">${jsonData}</script>
 <script>
@@ -297,6 +321,18 @@ export function generateInteractiveHtml(
 
   // Build Cytoscape elements with class per module type
   var elements = [];
+
+  // Add group compound nodes first
+  if (raw.groups) {
+    raw.groups.forEach(function(g) {
+      elements.push({
+        group: 'nodes',
+        data: { id: g.data.id, label: g.data.label, memberCount: g.data.memberCount, totalLoc: g.data.totalLoc },
+        classes: 'compound-group'
+      });
+    });
+  }
+
   raw.nodes.forEach(function(n) {
     elements.push({
       group: 'nodes',
@@ -347,6 +383,25 @@ export function generateInteractiveHtml(
       { selector: 'node.layout', style: { 'background-color': '#9B6BB0', 'border-color': '#9B6BB0' } },
       { selector: 'node.test', style: { 'background-color': '#8E99A4', 'border-color': '#8E99A4' } },
       {
+        selector: 'node.compound-group',
+        style: {
+          'background-color': '#161b22',
+          'background-opacity': 0.6,
+          'border-color': '#30363d',
+          'border-width': 2,
+          'border-style': 'dashed',
+          'shape': 'round-rectangle',
+          'padding': '20px',
+          'label': 'data(label)',
+          'text-valign': 'top',
+          'text-halign': 'center',
+          'text-margin-y': -8,
+          'font-size': '11px',
+          'font-weight': 'bold',
+          'color': '#8b949e'
+        }
+      },
+      {
         selector: 'node[?isOrphan]',
         style: { 'opacity': 0.4 }
       },
@@ -357,6 +412,10 @@ export function generateInteractiveHtml(
       {
         selector: 'node[?isCircular]',
         style: { 'border-color': '#CF5C5C', 'border-width': 3 }
+      },
+      {
+        selector: 'node[?isHotspot]',
+        style: { 'border-color': '#F97316', 'border-width': 3, 'border-style': 'double' }
       },
       {
         selector: 'edge',
@@ -376,6 +435,10 @@ export function generateInteractiveHtml(
       {
         selector: 'edge[type="data-flow"]',
         style: { 'line-style': 'dotted', 'line-color': '#45B5AA', 'target-arrow-color': '#45B5AA' }
+      },
+      {
+        selector: 'edge[type="temporal"]',
+        style: { 'line-style': 'dashed', 'line-color': '#F59E0B', 'target-arrow-color': '#F59E0B', 'width': 2, 'target-arrow-shape': 'diamond', 'opacity': 0.7 }
       },
       {
         selector: 'edge[?isCircular]',
@@ -484,7 +547,7 @@ export function generateInteractiveHtml(
       runLayout({ rankDir: 'LR', animate: true, animationDuration: 300 });
     } else if (view === 'issues') {
       cy.nodes().forEach(function(n) {
-        if (!n.data('isCircular') && !n.data('isOrphan') && !n.data('isGodModule')) {
+        if (!n.data('isCircular') && !n.data('isOrphan') && !n.data('isGodModule') && !n.data('isHotspot')) {
           n.hide();
         }
       });
@@ -514,9 +577,18 @@ export function generateInteractiveHtml(
     if (nodeData.isCircular) issues.push('Circular Dependency');
     if (nodeData.isOrphan) issues.push('Orphan Module');
     if (nodeData.isGodModule) issues.push('God Module');
+    if (nodeData.isHotspot) issues.push('Hotspot');
     if (issues.length > 0) {
       html += '<div class="field"><div class="field-label">Issues</div><div class="field-value">';
       issues.forEach(function(i) { html += '<span class="tag issue-tag">' + i + '</span>'; });
+      html += '</div></div>';
+    }
+
+    if (nodeData.hotspotScore != null && nodeData.hotspotScore > 0) {
+      html += '<div class="field"><div class="field-label">Hotspot Analysis</div><div class="field-value">';
+      html += 'Complexity: ' + (nodeData.complexity || 0) + ' branches<br>';
+      html += 'Change freq: ' + ((nodeData.changeFrequency || 0) * 100).toFixed(0) + '%<br>';
+      html += 'Score: <strong style="color:' + (nodeData.isHotspot ? '#F97316' : '#c9d1d9') + '">' + nodeData.hotspotScore.toFixed(2) + '</strong>';
       html += '</div></div>';
     }
 
@@ -583,6 +655,163 @@ export function generateInteractiveHtml(
       }
     });
   });
+
+  // --- Lens system ---
+  var MODULE_TYPE_COLORS = {
+    component: '#5B8DD9', hook: '#4CAF7D', util: '#8E99A4', page: '#9B6BB0',
+    'api-route': '#D4854A', store: '#CF5C5C', context: '#45B5AA', type: '#A0A8B0',
+    layout: '#9B6BB0', test: '#8E99A4', service: '#CF8C5C', controller: '#D4854A',
+    middleware: '#C8A832', config: '#8E99A4', model: '#7A8A9A', unknown: '#6B7280',
+    handler: '#D4854A', schema: '#88AACC', repository: '#7A8A9A', 'entry-point': '#8E99A4',
+    'route-config': '#D07028', guard: '#C88828', interceptor: '#C89838', validator: '#A0A8B0',
+    composable: '#4CAF7D', directive: '#5878D0', view: '#5B8DD9', template: '#5B8DD9',
+    entity: '#7A8A9A', dto: '#A0A8B0', migration: '#8E99A4', decorator: '#9B6BB0',
+    serializer: '#8E99A4'
+  };
+
+  var LANG_COLORS = {
+    javascript: '#f7df1e', typescript: '#3178c6', python: '#3776ab', go: '#00add8',
+    java: '#b07219', kotlin: '#A97BFF', rust: '#dea584', csharp: '#68217a',
+    php: '#4F5D95', ruby: '#CC342D'
+  };
+
+  var currentLens = 'dependencies';
+  var lensBtns = document.querySelectorAll('.lens-btn');
+  var legendEl = document.getElementById('legend');
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function gradientColor(t) {
+    // green → yellow → red
+    t = Math.max(0, Math.min(1, t));
+    if (t < 0.5) {
+      var p = t * 2;
+      var r = Math.round(lerp(76, 230, p));
+      var g = Math.round(lerp(175, 200, p));
+      var b = Math.round(lerp(80, 50, p));
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    } else {
+      var p2 = (t - 0.5) * 2;
+      var r2 = Math.round(lerp(230, 207, p2));
+      var g2 = Math.round(lerp(200, 92, p2));
+      var b2 = Math.round(lerp(50, 92, p2));
+      return 'rgb(' + r2 + ',' + g2 + ',' + b2 + ')';
+    }
+  }
+
+  function hotspotColor(t) {
+    // blue → yellow → red
+    t = Math.max(0, Math.min(1, t));
+    if (t < 0.33) {
+      var p = t * 3;
+      return 'rgb(' + Math.round(lerp(66, 200, p)) + ',' + Math.round(lerp(133, 200, p)) + ',' + Math.round(lerp(244, 80, p)) + ')';
+    } else if (t < 0.66) {
+      var p2 = (t - 0.33) * 3;
+      return 'rgb(' + Math.round(lerp(200, 249, p2)) + ',' + Math.round(lerp(200, 158, p2)) + ',' + Math.round(lerp(80, 11, p2)) + ')';
+    } else {
+      var p3 = (t - 0.66) * 3;
+      return 'rgb(' + Math.round(lerp(249, 220, p3)) + ',' + Math.round(lerp(158, 50, p3)) + ',' + Math.round(lerp(11, 50, p3)) + ')';
+    }
+  }
+
+  function legendItem(color, label, extra) {
+    return '<div class="legend-item"><div class="legend-dot" style="background:' + color + (extra || '') + '"></div> ' + label + '</div>';
+  }
+
+  function applyLens(lens) {
+    currentLens = lens;
+    lensBtns.forEach(function(b) { b.classList.toggle('active', b.dataset.lens === lens); });
+
+    var legendHtml = '';
+
+    if (lens === 'dependencies') {
+      // Restore module-type colors
+      cy.nodes().forEach(function(n) {
+        if (n.hasClass('compound-group')) return;
+        var mt = n.data('moduleType') || 'unknown';
+        var c = MODULE_TYPE_COLORS[mt] || MODULE_TYPE_COLORS.unknown;
+        n.style({ 'background-color': c, 'border-color': c, 'width': 40, 'height': 30 });
+        if (n.data('isHotspot')) n.style({ 'border-color': '#F97316', 'border-width': 3, 'border-style': 'double' });
+        if (n.data('isCircular')) n.style({ 'border-color': '#CF5C5C', 'border-width': 3 });
+        if (n.data('isGodModule')) n.style({ 'width': 60, 'height': 45, 'border-width': 3 });
+      });
+      // Show default legend
+      var seenTypes = {};
+      cy.nodes().forEach(function(n) {
+        var mt = n.data('moduleType');
+        if (mt && !seenTypes[mt] && mt !== 'unknown') { seenTypes[mt] = true; }
+      });
+      for (var mt in seenTypes) {
+        legendHtml += legendItem(MODULE_TYPE_COLORS[mt] || '#6B7280', mt);
+      }
+      legendHtml += legendItem('#F97316', 'Hotspot', '; border: 2px double #F97316');
+      legendHtml += legendItem('#F59E0B', 'Temporal', '; border: 1px dashed #F59E0B');
+
+    } else if (lens === 'complexity') {
+      // Node size + color by complexity (green→red)
+      cy.nodes().forEach(function(n) {
+        if (n.hasClass('compound-group')) return;
+        var c = n.data('complexity') || 0;
+        var hs = n.data('hotspotScore') || 0;
+        // Use normalizedComplexity approximation from complexity value
+        var maxC = 1;
+        raw.nodes.forEach(function(rn) { if ((rn.data.complexity || 0) > maxC) maxC = rn.data.complexity; });
+        var norm = maxC > 0 ? c / maxC : 0;
+        var color = gradientColor(norm);
+        var size = 30 + norm * 40;
+        n.style({ 'background-color': color, 'border-color': color, 'width': size, 'height': size * 0.75 });
+      });
+      legendHtml += legendItem(gradientColor(0), 'Low complexity');
+      legendHtml += legendItem(gradientColor(0.5), 'Medium');
+      legendHtml += legendItem(gradientColor(1), 'High complexity');
+
+    } else if (lens === 'hotspots') {
+      // blue→yellow→red by hotspot score, pulse on critical
+      cy.nodes().forEach(function(n) {
+        if (n.hasClass('compound-group')) return;
+        var score = n.data('hotspotScore') || 0;
+        var color = hotspotColor(score);
+        var size = 30 + score * 40;
+        n.style({ 'background-color': color, 'border-color': color, 'width': size, 'height': size * 0.75 });
+        if (score >= 0.75) {
+          n.style({ 'border-width': 4, 'border-style': 'double' });
+        }
+      });
+      legendHtml += legendItem(hotspotColor(0), 'Cold');
+      legendHtml += legendItem(hotspotColor(0.33), 'Warm');
+      legendHtml += legendItem(hotspotColor(0.66), 'Hot');
+      legendHtml += legendItem(hotspotColor(1), 'Critical');
+
+    } else if (lens === 'languages') {
+      // Color by programming language
+      cy.nodes().forEach(function(n) {
+        if (n.hasClass('compound-group')) return;
+        var lang = n.data('language') || 'unknown';
+        var color = LANG_COLORS[lang] || '#6B7280';
+        n.style({ 'background-color': color, 'border-color': color, 'width': 40, 'height': 30 });
+      });
+      var seenLangs = {};
+      cy.nodes().forEach(function(n) {
+        var lang = n.data('language');
+        if (lang && !seenLangs[lang]) seenLangs[lang] = true;
+      });
+      for (var lang in seenLangs) {
+        legendHtml += legendItem(LANG_COLORS[lang] || '#6B7280', lang);
+      }
+      if (!Object.keys(seenLangs).length) {
+        legendHtml += '<div class="legend-item" style="color:#6B7280">No language data available</div>';
+      }
+    }
+
+    legendEl.innerHTML = legendHtml;
+  }
+
+  lensBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() { applyLens(btn.dataset.lens); });
+  });
+
+  // Initialize default lens legend
+  applyLens('dependencies');
 
   console.log('[arch-map] Initialized with ' + raw.nodes.length + ' nodes, ' + raw.edges.length + ' edges. Layout: ' + (hasDagre ? 'dagre' : 'cose'));
 })();

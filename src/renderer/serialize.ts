@@ -1,6 +1,7 @@
 import type { Graph } from "../graph/types.js";
 import type { ArchReport } from "../analyzer/types.js";
 import type { ComponentInfo, ComponentDataFlow } from "../parser/types.js";
+import type { GroupedGraph, GroupInfo } from "../graph/grouping.js";
 
 export interface SerializedNode {
   data: {
@@ -15,6 +16,12 @@ export interface SerializedNode {
     isOrphan: boolean;
     isCircular: boolean;
     isGodModule: boolean;
+    isHotspot: boolean;
+    complexity?: number;
+    changeFrequency?: number;
+    hotspotScore?: number;
+    language?: string;
+    parent?: string;
     component?: ComponentInfo;
     dataFlow?: ComponentDataFlow;
   };
@@ -26,12 +33,24 @@ export interface SerializedEdge {
     target: string;
     type: string;
     isCircular: boolean;
+    weight?: number;
+  };
+}
+
+export interface SerializedGroupNode {
+  data: {
+    id: string;
+    label: string;
+    memberCount: number;
+    totalLoc: number;
+    moduleTypes: string[];
   };
 }
 
 export interface SerializedGraph {
   nodes: SerializedNode[];
   edges: SerializedEdge[];
+  groups?: SerializedGroupNode[];
   report: ArchReport;
 }
 
@@ -88,8 +107,13 @@ export function serializeGraph(
     dataFlowByPath.set(df.filePath, df);
   }
 
+  // Check if this is a grouped graph
+  const grouped = (graph as GroupedGraph).groups;
+  const nodeMembership = (graph as GroupedGraph).nodeMembership;
+
   const nodes: SerializedNode[] = [];
   for (const [id, node] of graph.nodes) {
+    const hotspot = report.hotspots?.get(id);
     nodes.push({
       data: {
         id,
@@ -103,10 +127,32 @@ export function serializeGraph(
         isOrphan: orphanSet.has(id),
         isCircular: circularNodeIds.has(id),
         isGodModule: godModuleIds.has(id),
+        isHotspot: hotspot?.isHotspot ?? false,
+        complexity: hotspot?.complexity,
+        changeFrequency: hotspot?.changeFrequency,
+        hotspotScore: hotspot?.hotspotScore,
+        language: node.language,
+        parent: nodeMembership?.get(id),
         component: componentByPath.get(node.filePath),
         dataFlow: dataFlowByPath.get(node.filePath),
       },
     });
+  }
+
+  // Add group compound nodes
+  const groups: SerializedGroupNode[] = [];
+  if (grouped) {
+    for (const [, info] of grouped) {
+      groups.push({
+        data: {
+          id: info.id,
+          label: info.label,
+          memberCount: info.memberCount,
+          totalLoc: info.totalLoc,
+          moduleTypes: info.moduleTypes,
+        },
+      });
+    }
   }
 
   // Only include edges whose source and target exist as node IDs
@@ -125,5 +171,21 @@ export function serializeGraph(
     }
   }
 
-  return { nodes, edges, report };
+  // Add temporal coupling edges
+  if (report.temporalCouplings) {
+    for (const tc of report.temporalCouplings) {
+      if (nodeIds.has(tc.fileA) && nodeIds.has(tc.fileB)) {
+        edges.push({
+          data: {
+            source: tc.fileA,
+            target: tc.fileB,
+            type: "temporal",
+            isCircular: false,
+          },
+        });
+      }
+    }
+  }
+
+  return { nodes, edges, groups: groups.length > 0 ? groups : undefined, report };
 }

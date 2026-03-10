@@ -44,17 +44,49 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-// Simple 2D noise using seeded PRNG
-function noiseGrid(w: number, h: number, seed: number): number[][] {
-  const rng = mulberry32(seed);
-  const grid: number[][] = [];
-  for (let y = 0; y < h; y++) {
-    grid[y] = [];
-    for (let x = 0; x < w; x++) {
-      grid[y][x] = rng();
-    }
+// Hash function for coherent noise lattice points
+function hashCoord(x: number, y: number, seed: number): number {
+  const rng = mulberry32(x * 374761393 + y * 668265263 + seed);
+  return rng();
+}
+
+// Smooth interpolation (cubic hermite)
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+// Value noise with bilinear interpolation - produces spatially coherent noise
+function valueNoise(x: number, y: number, scale: number, seed: number): number {
+  const sx = x / scale;
+  const sy = y / scale;
+  const ix = Math.floor(sx);
+  const iy = Math.floor(sy);
+  const fx = smoothstep(sx - ix);
+  const fy = smoothstep(sy - iy);
+
+  const v00 = hashCoord(ix, iy, seed);
+  const v10 = hashCoord(ix + 1, iy, seed);
+  const v01 = hashCoord(ix, iy + 1, seed);
+  const v11 = hashCoord(ix + 1, iy + 1, seed);
+
+  const top = v00 + (v10 - v00) * fx;
+  const bot = v01 + (v11 - v01) * fx;
+  return top + (bot - top) * fy;
+}
+
+// Fractal brownian motion - layer multiple noise octaves for natural detail
+function fbm(x: number, y: number, octaves: number, baseScale: number, seed: number): number {
+  let value = 0;
+  let amplitude = 1;
+  let totalAmp = 0;
+  let scale = baseScale;
+  for (let i = 0; i < octaves; i++) {
+    value += valueNoise(x, y, scale, seed + i * 1000) * amplitude;
+    totalAmp += amplitude;
+    amplitude *= 0.5;
+    scale *= 0.5;
   }
-  return grid;
+  return value / totalAmp;
 }
 
 // Map biome to its primary terrain types
@@ -77,11 +109,15 @@ export function generateTerrain(
   regions?: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>
 ): number[][] {
   const terrain: number[][] = [];
-  const seed = locations.length * 7 + width * 13; // deterministic from data
-  const noise = noiseGrid(width, height, seed);
+  const seed = locations.length * 7 + width * 13;
   const rng = mulberry32(seed + 999);
 
-  // Build set of occupied tiles and their neighbors (keep as grass)
+  // Noise layers for different terrain features
+  const elevationScale = Math.max(width, height) * 0.35;
+  const moistureScale = Math.max(width, height) * 0.3;
+  const detailScale = Math.max(width, height) * 0.12;
+
+  // Build set of protected tiles near locations
   const protected_ = new Set<string>();
   for (const loc of locations) {
     for (let dy = -2; dy <= loc.tileSize + 1; dy++) {
@@ -110,60 +146,115 @@ export function generateTerrain(
     return null;
   }
 
+  // Precompute noise fields using coherent noise
+  const elevation: number[][] = [];
+  const moisture: number[][] = [];
+  const detail: number[][] = [];
+
+  for (let y = 0; y < height; y++) {
+    elevation[y] = [];
+    moisture[y] = [];
+    detail[y] = [];
+    for (let x = 0; x < width; x++) {
+      elevation[y][x] = fbm(x, y, 4, elevationScale, seed);
+      moisture[y][x] = fbm(x, y, 3, moistureScale, seed + 500);
+      detail[y][x] = fbm(x, y, 2, detailScale, seed + 1000);
+    }
+  }
+
+  // Edge falloff: normalized distance from edge (0 at edge, 1 at center)
+  function edgeFalloff(x: number, y: number): number {
+    const ex = Math.min(x, width - 1 - x) / (width * 0.15);
+    const ey = Math.min(y, height - 1 - y) / (height * 0.15);
+    return Math.min(1, Math.min(ex, ey));
+  }
+
   // Initialize terrain
   for (let y = 0; y < height; y++) {
     terrain[y] = [];
     for (let x = 0; x < width; x++) {
-      const n = noise[y][x];
-      const edgeDist = Math.min(x, y, width - 1 - x, height - 1 - y);
+      const elev = elevation[y][x];
+      const moist = moisture[y][x];
+      const det = detail[y][x];
+      const edge = edgeFalloff(x, y);
       const isProtected = protected_.has(`${x},${y}`);
       const biome = getRegionBiome(x, y);
 
+      // Combine elevation with edge falloff for natural coastline
+      // Lower elevation near edges creates water/beach borders
+      const effectiveElev = elev * (0.3 + 0.7 * edge);
+
       if (isProtected) {
-        // Near locations: biome-tinted grass
+        // Near buildings: biome-tinted grass for readability
         if (biome) {
           const bt = BIOME_TERRAIN[biome];
-          terrain[y][x] = n > 0.8 ? bt.accent : (n > 0.6 ? bt.primary : Math.floor(rng() * 4));
+          terrain[y][x] = det > 0.65 ? bt.accent : Math.floor(det * 4);
         } else {
-          terrain[y][x] = Math.floor(rng() * 4); // GRASS1-4
+          terrain[y][x] = Math.floor(det * 3.99);
         }
       } else if (biome) {
-        // Inside a biome region: heavily biome-themed terrain
+        // Inside a biome region: themed terrain with coherent patterns
         const bt = BIOME_TERRAIN[biome];
-        if (n > 0.75) {
+        if (det > 0.7) {
           terrain[y][x] = bt.secondary;
-        } else if (n > 0.45) {
+        } else if (det > 0.35) {
           terrain[y][x] = bt.primary;
-        } else if (n > 0.25) {
+        } else if (det > 0.2) {
           terrain[y][x] = bt.accent;
         } else {
-          terrain[y][x] = bt.primary; // fill remaining with primary biome
+          terrain[y][x] = bt.primary;
         }
       } else {
-        // Wilderness between regions — varied natural terrain
-        if (edgeDist <= 2 && n > 0.35) {
-          terrain[y][x] = TERRAIN.MOUNTAIN; // mountain border ring
-        } else if (edgeDist <= 4 && n > 0.6) {
-          terrain[y][x] = rng() > 0.5 ? TERRAIN.MOUNTAIN : TERRAIN.SNOW;
-        } else if (n > 0.78) {
-          terrain[y][x] = TERRAIN.FOREST;
-        } else if (n > 0.72) {
-          terrain[y][x] = TERRAIN.DARK_GRASS;
-        } else if (n > 0.68 && edgeDist > 5) {
+        // Wilderness: natural terrain based on elevation + moisture
+        if (effectiveElev < 0.22) {
+          // Deep water (low elevation near edges or in basins)
           terrain[y][x] = TERRAIN.WATER;
-        } else if (n > 0.62) {
-          terrain[y][x] = TERRAIN.FOREST;
-        } else if (n > 0.52) {
-          // Mix of flower meadows and grass
-          terrain[y][x] = rng() > 0.7 ? TERRAIN.FLOWER : Math.floor(rng() * 4);
+        } else if (effectiveElev < 0.28) {
+          // Shoreline: beach sand transitioning from water
+          terrain[y][x] = det > 0.5 ? TERRAIN.COAST_SAND : TERRAIN.WATER;
+        } else if (effectiveElev > 0.72) {
+          // High peaks: snow-capped mountains
+          terrain[y][x] = det > 0.6 ? TERRAIN.SNOW : TERRAIN.MOUNTAIN;
+        } else if (effectiveElev > 0.62) {
+          // Mountain foothills
+          terrain[y][x] = det > 0.55 ? TERRAIN.MOUNTAIN : TERRAIN.GRASS3;
+        } else if (moist > 0.62 && effectiveElev < 0.45) {
+          // Wet lowlands: lakes and ponds
+          if (moist > 0.72) {
+            terrain[y][x] = TERRAIN.WATER;
+          } else {
+            terrain[y][x] = det > 0.5 ? TERRAIN.SWAMP : TERRAIN.DARK_GRASS;
+          }
+        } else if (moist > 0.55) {
+          // Moist areas: dense forest
+          terrain[y][x] = det > 0.5 ? TERRAIN.FOREST : TERRAIN.DARK_GRASS;
+        } else if (moist < 0.35 && effectiveElev > 0.45) {
+          // Dry highlands: sandy with sparse vegetation
+          terrain[y][x] = det > 0.6 ? TERRAIN.SAND : TERRAIN.GRASS4;
+        } else if (moist > 0.42) {
+          // Moderate moisture: mixed forest and meadows
+          if (det > 0.65) {
+            terrain[y][x] = TERRAIN.FOREST;
+          } else if (det > 0.45) {
+            terrain[y][x] = TERRAIN.FLOWER;
+          } else {
+            terrain[y][x] = Math.floor(det * 3.99); // grass variants
+          }
         } else {
-          terrain[y][x] = Math.floor(rng() * 4); // GRASS1-4
+          // Default: open grassland with occasional features
+          if (det > 0.72) {
+            terrain[y][x] = TERRAIN.FOREST;
+          } else if (det > 0.6) {
+            terrain[y][x] = rng() > 0.6 ? TERRAIN.FLOWER : TERRAIN.GRASS2;
+          } else {
+            terrain[y][x] = Math.floor(det * 3.99); // grass variants
+          }
         }
       }
     }
   }
 
-  // Paint region borders: rivers between adjacent different-biome regions
+  // Paint rivers between different biome regions
   if (regions && regions.size > 1) {
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
@@ -171,10 +262,11 @@ export function generateTerrain(
         const b1 = getRegionBiome(x, y);
         const b2 = getRegionBiome(x + 1, y);
         const b3 = getRegionBiome(x, y + 1);
-        // At the transition between two different biomes
         if ((b1 && b2 && b1 !== b2) || (b1 && b3 && b1 !== b3)) {
-          if (rng() > 0.3) {
-            terrain[y][x] = TERRAIN.WATER; // river border
+          // Use coherent noise for river width variation
+          const riverNoise = detail[y][x];
+          if (riverNoise > 0.25) {
+            terrain[y][x] = TERRAIN.WATER;
           }
         }
       }

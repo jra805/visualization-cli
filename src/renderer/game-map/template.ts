@@ -396,7 +396,8 @@ canvas#minimap {
   var PATH_COLORS = {
     "import":    { main: "#c4a265", glow: "#d4b275" },
     "renders":   { main: "#d4a017", glow: "#e4b027" },
-    "data-flow": { main: "#4488cc", glow: "#66aaee" }
+    "data-flow": { main: "#4488cc", glow: "#66aaee" },
+    "temporal":  { main: "#f59e0b", glow: "#fbbf24" }
   };
   var CURSED_COLOR = "#cc3333";
 
@@ -461,141 +462,300 @@ canvas#minimap {
     var d = terrainDetails[detailIdx % terrainDetails.length];
 
     if (type <= 3) {
-      // Grass variants
+      // Grass variants — richer detail with tufts, shadows, and highlights
       ctx.fillStyle = GRASS[type];
       ctx.fillRect(px, py, TILE, TILE);
-      if (d.r1 > 0.7) {
-        ctx.fillStyle = "#3a7c2f";
-        ctx.fillRect(px + Math.floor(d.r2 * 12) + 2, py + Math.floor(d.r3 * 12) + 2, 2, 2);
+      // Subtle shade variation (darker patch)
+      if (d.r1 > 0.55) {
+        ctx.fillStyle = "#3e7a33";
+        var sx1 = Math.floor(d.r2 * 10) + 1;
+        var sy1 = Math.floor(d.r3 * 10) + 1;
+        ctx.fillRect(px + sx1, py + sy1, 4, 3);
       }
-      if (d.r4 > 0.8) {
+      // Grass tuft (tiny darker blades)
+      if (d.r2 > 0.4) {
+        ctx.fillStyle = "#3a7c2f";
+        ctx.fillRect(px + Math.floor(d.r3 * 11) + 2, py + Math.floor(d.r4 * 11) + 2, 1, 2);
+        ctx.fillRect(px + Math.floor(d.r3 * 11) + 4, py + Math.floor(d.r4 * 11) + 1, 1, 2);
+      }
+      // Light highlight
+      if (d.r4 > 0.7) {
         ctx.fillStyle = "#6aac5f";
         ctx.fillRect(px + Math.floor(d.r1 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 1, 1);
+        ctx.fillRect(px + Math.floor(d.r2 * 8) + 5, py + Math.floor(d.r3 * 8) + 6, 1, 1);
+      }
+      // Occasional small stone/pebble
+      if (d.r1 > 0.88) {
+        ctx.fillStyle = "#8a8a7a";
+        ctx.fillRect(px + Math.floor(d.r3 * 10) + 3, py + Math.floor(d.r2 * 10) + 5, 2, 1);
       }
     } else if (type === 4) {
-      // Forest
-      ctx.fillStyle = GRASS[0];
+      // Forest — varied tree shapes with undergrowth
+      ctx.fillStyle = "#3a7530";
       ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#6b4904";
-      ctx.fillRect(px + 7, py + 10, 2, 5);
+      // Undergrowth variation
+      ctx.fillStyle = "#2e6528";
+      ctx.fillRect(px + Math.floor(d.r1 * 8), py + Math.floor(d.r2 * 8), 6, 5);
+      // Trunk
+      ctx.fillStyle = d.r3 > 0.5 ? "#6b4904" : "#5a3c08";
+      var trunkX = 6 + Math.floor(d.r1 * 3);
+      ctx.fillRect(px + trunkX, py + 9, 2, 6);
+      // Canopy (varied shape)
       ctx.fillStyle = d.r1 > 0.5 ? "#1e4d2b" : "#2a5e36";
-      ctx.fillRect(px + 4, py + 4, 8, 6);
-      ctx.fillRect(px + 6, py + 2, 4, 2);
-      ctx.fillStyle = "#2e6d3b";
-      ctx.fillRect(px + 6, py + 4, 3, 2);
+      if (d.r2 > 0.5) {
+        // Round canopy
+        ctx.fillRect(px + 3, py + 3, 10, 6);
+        ctx.fillRect(px + 5, py + 1, 6, 2);
+      } else {
+        // Pointed canopy (pine-like)
+        ctx.fillRect(px + 5, py + 1, 6, 2);
+        ctx.fillRect(px + 3, py + 3, 10, 3);
+        ctx.fillRect(px + 4, py + 6, 8, 3);
+      }
+      // Canopy highlight
+      ctx.fillStyle = "#3a7a3e";
+      ctx.fillRect(px + 5, py + 3, 3, 2);
+      // Shadow under tree
+      ctx.fillStyle = "#1a4520";
+      ctx.fillRect(px + 4, py + 13, 8, 1);
     } else if (type === 5) {
-      // Mountain
-      ctx.fillStyle = GRASS[2];
+      // Mountain — more detailed with rock layers and crevices
+      ctx.fillStyle = "#5a7a50";
       ctx.fillRect(px, py, TILE, TILE);
+      // Rock base
       ctx.fillStyle = "#8b7d6b";
-      ctx.fillRect(px + 2, py + 8, 12, 8);
-      ctx.fillRect(px + 4, py + 5, 8, 3);
-      ctx.fillRect(px + 6, py + 3, 4, 2);
-      ctx.fillStyle = "#d0d0d0";
-      ctx.fillRect(px + 7, py + 3, 2, 2);
+      ctx.fillRect(px + 1, py + 7, 14, 9);
+      // Mid layer
+      ctx.fillStyle = "#9a8d7b";
+      ctx.fillRect(px + 3, py + 4, 10, 4);
+      // Peak
+      ctx.fillRect(px + 5, py + 2, 6, 3);
+      ctx.fillStyle = "#7b6d5b";
+      ctx.fillRect(px + 7, py + 1, 3, 2);
+      // Snow cap
+      ctx.fillStyle = "#d8dce8";
+      ctx.fillRect(px + 6, py + 1, 4, 2);
+      ctx.fillRect(px + 7, py + 0, 2, 1);
+      // Rock crevice detail
       ctx.fillStyle = "#6b5d4b";
-      ctx.fillRect(px + 2, py + 12, 4, 4);
+      ctx.fillRect(px + 2, py + 11, 3, 2);
+      ctx.fillRect(px + 10, py + 9, 2, 3);
+      // Highlight
+      ctx.fillStyle = "#aaa090";
+      ctx.fillRect(px + 5, py + 4, 2, 1);
     } else if (type === 6) {
-      // Water (animated)
-      ctx.fillStyle = "#3b6ba5";
+      // Water — deeper color with foam and ripple detail
+      ctx.fillStyle = "#2a5a90";
       ctx.fillRect(px, py, TILE, TILE);
+      // Depth variation
+      ctx.fillStyle = "#3268a0";
+      ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 6), 8, 6);
+      // Animated wave highlights
       ctx.fillStyle = "#5b8bc5";
-      var waveOff = (animFrame + Math.floor(d.r1 * 8)) % 12;
-      ctx.fillRect(px + waveOff, py + 4, 4, 1);
-      ctx.fillRect(px + ((waveOff + 6) % 14), py + 10, 3, 1);
+      var waveOff = (animFrame + Math.floor(d.r1 * 8)) % 14;
+      ctx.fillRect(px + waveOff % 12, py + 3, 4, 1);
+      ctx.fillRect(px + ((waveOff + 7) % 13), py + 9, 3, 1);
+      // Foam/sparkle
+      ctx.fillStyle = "#8ab8e0";
+      var foamOff = (animFrame + Math.floor(d.r3 * 10)) % 12;
+      ctx.fillRect(px + foamOff % 11 + 2, py + 6, 2, 1);
+      // Deep shadow
+      if (d.r4 > 0.6) {
+        ctx.fillStyle = "#1e4a78";
+        ctx.fillRect(px + Math.floor(d.r2 * 8) + 3, py + Math.floor(d.r4 * 8) + 3, 3, 2);
+      }
     } else if (type === 7) {
-      // Sand (desert)
+      // Sand (desert) — dune patterns with wind ripples
       ctx.fillStyle = "#c4a040";
       ctx.fillRect(px, py, TILE, TILE);
+      // Dune highlight
       ctx.fillStyle = "#d4b060";
-      if (d.r1 > 0.6) ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 2, 3, 2);
-      if (d.r4 > 0.7) {
-        ctx.fillStyle = "#b49030";
-        ctx.fillRect(px + Math.floor(d.r1 * 8) + 4, py + Math.floor(d.r4 * 8) + 4, 2, 1);
+      ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 4), 8, 4);
+      // Wind ripple lines
+      ctx.fillStyle = "#b49030";
+      ctx.fillRect(px + 1, py + Math.floor(d.r3 * 8) + 4, 12, 1);
+      if (d.r4 > 0.4) ctx.fillRect(px + 2, py + Math.floor(d.r1 * 6) + 8, 10, 1);
+      // Shadow in dune valley
+      if (d.r1 > 0.6) {
+        ctx.fillStyle = "#a08028";
+        ctx.fillRect(px + Math.floor(d.r2 * 8) + 3, py + Math.floor(d.r3 * 8) + 3, 4, 2);
       }
     } else if (type === 8) {
-      // Swamp
+      // Swamp — murky water with reeds and moss
+      ctx.fillStyle = "#2a4028";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Murky patches
       ctx.fillStyle = "#3a5030";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#4a6040";
-      ctx.fillRect(px + Math.floor(d.r1 * 8) + 2, py + Math.floor(d.r2 * 8) + 2, 4, 3);
-      // Puddles
-      if (d.r3 > 0.6) {
-        ctx.fillStyle = "#3b6b55";
-        ctx.fillRect(px + Math.floor(d.r4 * 10) + 2, py + Math.floor(d.r1 * 10) + 2, 3, 2);
+      ctx.fillRect(px + Math.floor(d.r1 * 6) + 1, py + Math.floor(d.r2 * 6) + 1, 7, 5);
+      // Standing water puddle
+      ctx.fillStyle = "#2a5040";
+      ctx.fillRect(px + Math.floor(d.r3 * 8) + 2, py + Math.floor(d.r4 * 8) + 2, 4, 3);
+      // Reed stalks
+      if (d.r1 > 0.4) {
+        ctx.fillStyle = "#5a7040";
+        ctx.fillRect(px + Math.floor(d.r2 * 10) + 3, py + 2, 1, 6);
+        ctx.fillRect(px + Math.floor(d.r3 * 10) + 5, py + 3, 1, 5);
       }
-    } else if (type === 9) {
-      // Crystal ground
-      ctx.fillStyle = "#6088a0";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#88aacc";
-      if (d.r1 > 0.5) ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 2, 3, 3);
-      // Sparkle
-      if (d.r4 > 0.8) {
-        ctx.fillStyle = "#ccddee";
-        ctx.fillRect(px + Math.floor(d.r1 * 12) + 2, py + Math.floor(d.r4 * 12) + 2, 1, 1);
-      }
-    } else if (type === 10) {
-      // Lava (volcanic, animated)
-      ctx.fillStyle = "#4a3030";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#aa3320";
-      var lavaOff = (animFrame + Math.floor(d.r1 * 10)) % 10;
-      ctx.fillRect(px + lavaOff, py + Math.floor(d.r2 * 10) + 2, 4, 3);
-      if (d.r3 > 0.5) {
-        ctx.fillStyle = "#dd5522";
-        ctx.fillRect(px + Math.floor(d.r4 * 8) + 4, py + Math.floor(d.r1 * 8) + 4, 2, 2);
-      }
-    } else if (type === 11) {
-      // Castle floor (cobblestone)
-      ctx.fillStyle = "#8a7a60";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#9a8a70";
-      ctx.fillRect(px + 1, py + 1, 6, 6);
-      ctx.fillRect(px + 9, py + 1, 6, 6);
-      ctx.fillRect(px + 5, py + 9, 6, 6);
-      ctx.fillStyle = "#7a6a50";
-      ctx.fillRect(px, py + 7, TILE, 1);
-      ctx.fillRect(px + 8, py, 1, 7);
-    } else if (type === 12) {
-      // Coastal sand (beach)
-      ctx.fillStyle = "#d4c4a0";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#c0b490";
-      if (d.r1 > 0.5) ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 2, 3, 1);
-      // Shells
-      if (d.r4 > 0.85) {
-        ctx.fillStyle = "#e0d0b0";
-        ctx.fillRect(px + Math.floor(d.r1 * 12) + 2, py + Math.floor(d.r4 * 12) + 2, 2, 1);
-      }
-    } else if (type === 13) {
-      // Snow
-      ctx.fillStyle = "#d8dce8";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#e8ecf8";
-      if (d.r1 > 0.4) ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 2, 4, 3);
-      ctx.fillStyle = "#c0c8d8";
-      if (d.r4 > 0.7) ctx.fillRect(px + Math.floor(d.r1 * 8) + 4, py + Math.floor(d.r4 * 8) + 4, 2, 1);
-    } else if (type === 14) {
-      // Dark grass (forest biome undergrowth)
-      ctx.fillStyle = "#2e5a2a";
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "#1e4a1e";
-      if (d.r1 > 0.5) ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 2, 3, 3);
-      if (d.r4 > 0.7) {
-        ctx.fillStyle = "#3e6a3a";
+      // Moss highlight
+      if (d.r4 > 0.6) {
+        ctx.fillStyle = "#4a7038";
         ctx.fillRect(px + Math.floor(d.r1 * 8) + 4, py + Math.floor(d.r4 * 8) + 4, 2, 2);
       }
+    } else if (type === 9) {
+      // Crystal ground — glowing crystals emerging from earth
+      ctx.fillStyle = "#506878";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Crystal earth base
+      ctx.fillStyle = "#6088a0";
+      ctx.fillRect(px + Math.floor(d.r1 * 6) + 1, py + Math.floor(d.r2 * 6) + 1, 7, 5);
+      // Crystal formation
+      if (d.r1 > 0.35) {
+        ctx.fillStyle = "#88aacc";
+        ctx.fillRect(px + Math.floor(d.r2 * 8) + 3, py + Math.floor(d.r3 * 6) + 2, 3, 4);
+        ctx.fillRect(px + Math.floor(d.r2 * 8) + 4, py + Math.floor(d.r3 * 6) + 1, 1, 2);
+      }
+      // Sparkle (animated twinkle)
+      if (d.r4 > 0.6) {
+        ctx.fillStyle = "#ccddff";
+        var sparkOff = (animFrame + Math.floor(d.r1 * 20)) % 8;
+        if (sparkOff < 3) {
+          ctx.fillRect(px + Math.floor(d.r3 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 1, 1);
+        }
+      }
+    } else if (type === 10) {
+      // Lava (volcanic, animated) — molten rock with glow
+      ctx.fillStyle = "#3a2020";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Cooled rock patches
+      ctx.fillStyle = "#4a3030";
+      ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 6), 6, 5);
+      // Molten lava (animated)
+      ctx.fillStyle = "#cc4420";
+      var lavaOff = (animFrame + Math.floor(d.r1 * 10)) % 10;
+      ctx.fillRect(px + lavaOff % 10 + 1, py + Math.floor(d.r2 * 8) + 2, 5, 3);
+      // Hot glow
+      if (d.r3 > 0.4) {
+        ctx.fillStyle = "#ee6630";
+        ctx.fillRect(px + Math.floor(d.r4 * 8) + 3, py + Math.floor(d.r1 * 8) + 3, 3, 2);
+      }
+      // Bright sparks
+      ctx.fillStyle = "#ffaa44";
+      var sparkOff2 = (animFrame + Math.floor(d.r3 * 12)) % 6;
+      if (sparkOff2 < 2) {
+        ctx.fillRect(px + Math.floor(d.r4 * 10) + 3, py + Math.floor(d.r2 * 10) + 3, 1, 1);
+      }
+    } else if (type === 11) {
+      // Castle floor (cobblestone) — detailed brick pattern
+      ctx.fillStyle = "#7a6a50";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Brick rows
+      ctx.fillStyle = "#8a7a60";
+      ctx.fillRect(px + 1, py + 1, 6, 3);
+      ctx.fillRect(px + 9, py + 1, 6, 3);
+      ctx.fillRect(px + 5, py + 5, 6, 3);
+      ctx.fillRect(px + 1, py + 9, 5, 3);
+      ctx.fillRect(px + 8, py + 9, 7, 3);
+      ctx.fillRect(px + 3, py + 13, 6, 2);
+      // Mortar lines
+      ctx.fillStyle = "#6a5a40";
+      ctx.fillRect(px, py + 4, TILE, 1);
+      ctx.fillRect(px, py + 8, TILE, 1);
+      ctx.fillRect(px, py + 12, TILE, 1);
+      ctx.fillRect(px + 7, py, 1, 4);
+      ctx.fillRect(px + 4, py + 4, 1, 4);
+      ctx.fillRect(px + 11, py + 4, 1, 4);
+      // Highlight on some stones
+      if (d.r1 > 0.6) {
+        ctx.fillStyle = "#9a8a70";
+        ctx.fillRect(px + 2, py + 2, 2, 1);
+      }
+    } else if (type === 12) {
+      // Coastal sand (beach) — wet sand with surf detail
+      ctx.fillStyle = "#d4c4a0";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Wet sand patches
+      ctx.fillStyle = "#c0b490";
+      ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 6), 8, 5);
+      // Tidal line
+      ctx.fillStyle = "#b0a480";
+      if (d.r1 > 0.3) ctx.fillRect(px, py + Math.floor(d.r3 * 8) + 4, 14, 1);
+      // Shells and pebbles
+      if (d.r4 > 0.7) {
+        ctx.fillStyle = "#e8dcc0";
+        ctx.fillRect(px + Math.floor(d.r1 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 2, 1);
+      }
+      if (d.r2 > 0.8) {
+        ctx.fillStyle = "#a09878";
+        ctx.fillRect(px + Math.floor(d.r3 * 8) + 5, py + Math.floor(d.r1 * 8) + 5, 1, 1);
+      }
+    } else if (type === 13) {
+      // Snow — drifts with shadow and sparkle
+      ctx.fillStyle = "#d0d4e0";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Snow drift highlights
+      ctx.fillStyle = "#e8ecf8";
+      ctx.fillRect(px + Math.floor(d.r1 * 6) + 1, py + Math.floor(d.r2 * 6) + 1, 8, 5);
+      // Wind-blown pattern
+      if (d.r1 > 0.3) {
+        ctx.fillStyle = "#f0f4ff";
+        ctx.fillRect(px + Math.floor(d.r3 * 8) + 2, py + Math.floor(d.r4 * 6) + 2, 5, 2);
+      }
+      // Shadow in hollows
+      ctx.fillStyle = "#b8c0d0";
+      if (d.r4 > 0.5) ctx.fillRect(px + Math.floor(d.r2 * 8) + 4, py + Math.floor(d.r3 * 8) + 6, 3, 2);
+      // Sparkle
+      if (d.r3 > 0.8) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(px + Math.floor(d.r1 * 12) + 2, py + Math.floor(d.r4 * 12) + 2, 1, 1);
+      }
+    } else if (type === 14) {
+      // Dark grass (forest undergrowth) — dense foliage on ground
+      ctx.fillStyle = "#2e5a2a";
+      ctx.fillRect(px, py, TILE, TILE);
+      // Undergrowth patches
+      ctx.fillStyle = "#1e4a1e";
+      ctx.fillRect(px + Math.floor(d.r1 * 6) + 1, py + Math.floor(d.r2 * 6) + 1, 6, 5);
+      // Fern fronds
+      if (d.r1 > 0.35) {
+        ctx.fillStyle = "#3a6a32";
+        ctx.fillRect(px + Math.floor(d.r3 * 8) + 2, py + 4, 1, 4);
+        ctx.fillRect(px + Math.floor(d.r3 * 8) + 3, py + 3, 3, 1);
+        ctx.fillRect(px + Math.floor(d.r3 * 8) + 3, py + 6, 2, 1);
+      }
+      // Fallen leaves
+      if (d.r4 > 0.65) {
+        ctx.fillStyle = "#4a3a18";
+        ctx.fillRect(px + Math.floor(d.r2 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 2, 1);
+      }
+      // Moss spots
+      ctx.fillStyle = "#2a6a28";
+      if (d.r2 > 0.6) ctx.fillRect(px + Math.floor(d.r4 * 8) + 5, py + Math.floor(d.r1 * 8) + 5, 2, 2);
     } else if (type === 15) {
-      // Wildflowers (plains)
+      // Wildflowers — lush meadow with multiple flower types
       ctx.fillStyle = "#5a9c4a";
       ctx.fillRect(px, py, TILE, TILE);
-      var flowerColors = ["#dd6688", "#dddd44", "#8888dd", "#dd8844"];
+      // Grass texture underneath
+      ctx.fillStyle = "#4a8c3a";
+      ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 6), 6, 4);
+      // Multiple flowers
+      var flowerColors = ["#dd6688", "#dddd44", "#8888dd", "#dd8844", "#ee88aa", "#ffff66"];
+      // Main flower
       ctx.fillStyle = flowerColors[Math.floor(d.r1 * 4)];
-      ctx.fillRect(px + Math.floor(d.r2 * 12) + 2, py + Math.floor(d.r3 * 12) + 2, 2, 2);
-      if (d.r4 > 0.5) {
-        ctx.fillStyle = flowerColors[Math.floor(d.r4 * 4)];
-        ctx.fillRect(px + Math.floor(d.r1 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 1, 1);
+      ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 2, 2, 2);
+      // Stem
+      ctx.fillStyle = "#3a7a30";
+      ctx.fillRect(px + Math.floor(d.r2 * 10) + 2, py + Math.floor(d.r3 * 10) + 4, 1, 2);
+      // Second flower
+      if (d.r4 > 0.35) {
+        ctx.fillStyle = flowerColors[Math.floor(d.r4 * 6)];
+        ctx.fillRect(px + Math.floor(d.r1 * 8) + 5, py + Math.floor(d.r4 * 8) + 4, 2, 2);
+        ctx.fillStyle = "#3a7a30";
+        ctx.fillRect(px + Math.floor(d.r1 * 8) + 5, py + Math.floor(d.r4 * 8) + 6, 1, 2);
+      }
+      // Third flower (small)
+      if (d.r3 > 0.5) {
+        ctx.fillStyle = flowerColors[Math.floor(d.r3 * 5)];
+        ctx.fillRect(px + Math.floor(d.r4 * 8) + 8, py + Math.floor(d.r2 * 8) + 1, 1, 1);
       }
     }
   }
@@ -1051,6 +1211,28 @@ canvas#minimap {
       ctx.fillRect(bx - 1, -2, 2, 1);
     }
 
+    // Hotspot: animated fire effect
+    if (loc.isHotspot) {
+      var fw = loc.tileSize * TILE;
+      var fh = loc.tileSize * TILE;
+      // Flickering fire particles around the building
+      var fireColors = ["#FF4500", "#FF6B35", "#FFA500", "#FFD700"];
+      for (var fi = 0; fi < 6; fi++) {
+        var fx = Math.floor(Math.sin(animFrame * 0.1 + fi * 1.2) * fw * 0.4 + fw / 2);
+        var fy = Math.floor(-2 - Math.abs(Math.sin(animFrame * 0.15 + fi * 0.8)) * 6);
+        ctx.fillStyle = fireColors[fi % fireColors.length];
+        ctx.globalAlpha = 0.6 + Math.sin(animFrame * 0.2 + fi) * 0.3;
+        ctx.fillRect(fx - 1, fy, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+      // Orange glow underneath
+      ctx.shadowColor = "#FF6B35";
+      ctx.shadowBlur = 6 + Math.sin(animFrame * 0.12) * 3;
+      ctx.fillStyle = "rgba(255, 107, 53, 0.15)";
+      ctx.fillRect(0, 0, fw, fh);
+      ctx.shadowBlur = 0;
+    }
+
     ctx.restore();
 
     // Label below location
@@ -1068,7 +1250,7 @@ canvas#minimap {
   }
 
   // === DRAWING: PATHS ===
-  var visibleEdgeTypes = { "import": true, "renders": true, "data-flow": true };
+  var visibleEdgeTypes = { "import": true, "renders": true, "data-flow": true, "temporal": true };
 
   // === VIEW MODES ===
   var currentView = "kingdom";
@@ -1089,7 +1271,7 @@ canvas#minimap {
       return loc.fanIn > 0 || loc.fanOut > 0;
     },
     threat: function(loc) {
-      return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge;
+      return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge || loc.isHotspot;
     }
   };
 
@@ -1193,6 +1375,24 @@ canvas#minimap {
 
   // === CLICK -> DETAIL PANEL ===
   var selectedLoc = null;
+  var selectedPaths = [];
+  var selectedNeighborIds = new Set();
+  var PARTICLE_SPEED = 0.002;
+  var PARTICLES_PER_PATH = 4;
+
+  function computeSelectedConnections() {
+    selectedPaths = [];
+    selectedNeighborIds = new Set();
+    if (!selectedLoc) return;
+    for (var i = 0; i < paths.length; i++) {
+      var p = paths[i];
+      if (p.sourceId === selectedLoc.id || p.targetId === selectedLoc.id) {
+        selectedPaths.push(p);
+        if (p.sourceId === selectedLoc.id) selectedNeighborIds.add(p.targetId);
+        if (p.targetId === selectedLoc.id) selectedNeighborIds.add(p.sourceId);
+      }
+    }
+  }
 
   canvas.addEventListener("click", function(e) {
     if (Math.abs(e.clientX - dragStart.x) > 3 || Math.abs(e.clientY - dragStart.y) > 3) return;
@@ -1200,9 +1400,12 @@ canvas#minimap {
     var loc = hitTest(e.clientX - rect.left, e.clientY - rect.top);
     if (loc) {
       selectedLoc = loc;
+      computeSelectedConnections();
       showDetail(loc);
     } else {
       selectedLoc = null;
+      selectedPaths = [];
+      selectedNeighborIds = new Set();
       hideDetail();
     }
   });
@@ -1234,6 +1437,7 @@ canvas#minimap {
     if (loc.isCircular) issues.push("Circular Dependency (Cursed!)");
     if (loc.isOrphan) issues.push("Orphaned (Abandoned)");
     if (loc.isGodModule) issues.push("God Module (Overgrown)");
+    if (loc.isHotspot) issues.push("Hotspot (On Fire! Score: " + loc.hotspotScore.toFixed(2) + ")");
     if (loc.isBridge) issues.push("Bridge Node (Articulation Point)");
     if (issues.length) {
       addSection(panel, "Threats", issues, "issue");
@@ -1418,14 +1622,39 @@ canvas#minimap {
       filteredPaths = paths.filter(function(p) { return p.isCircular; });
     }
 
+    // Build set of connected path indices for quick lookup
+    var connectedPathSet = new Set();
+    if (selectedLoc) {
+      for (var ci = 0; ci < filteredPaths.length; ci++) {
+        var cp = filteredPaths[ci];
+        if (cp.sourceId === selectedLoc.id || cp.targetId === selectedLoc.id) {
+          connectedPathSet.add(ci);
+        }
+      }
+    }
+
     for (var pi = 0; pi < filteredPaths.length; pi++) {
       var p = filteredPaths[pi];
       if (p.points.length < 2) continue;
       var pcolor = p.isCircular ? CURSED_COLOR : (PATH_COLORS[p.edgeType] || PATH_COLORS["import"]).main;
+      var glowColor = p.isCircular ? CURSED_COLOR : (PATH_COLORS[p.edgeType] || PATH_COLORS["import"]).glow;
       // Path width scales with importance
       var baseWidth = p.isCircular ? 3 : (p.edgeType === "renders" ? 2.5 : 1.5);
       var impScale = p.importance ? Math.min(1.5, 0.8 + p.importance / 40) : 1;
       var pwidth = baseWidth * impScale * cam.zoom;
+
+      var isConnected = connectedPathSet.has(pi);
+
+      // Dim or highlight based on selection
+      if (selectedLoc) {
+        if (isConnected) {
+          pwidth += 1 * cam.zoom;
+          ctx.shadowColor = glowColor;
+          ctx.shadowBlur = 6;
+        } else {
+          ctx.shadowBlur = 0;
+        }
+      }
 
       ctx.beginPath();
       var ps0 = worldToScreen(p.points[0][0] * TILE + TILE / 2, p.points[0][1] * TILE + TILE / 2);
@@ -1436,8 +1665,14 @@ canvas#minimap {
       }
       ctx.strokeStyle = pcolor;
       ctx.lineWidth = pwidth;
-      ctx.globalAlpha = p.isCircular ? 0.85 : 0.55;
-      if (p.edgeType === "data-flow" && !p.isCircular) {
+      if (selectedLoc) {
+        ctx.globalAlpha = isConnected ? 0.9 : 0.1;
+      } else {
+        ctx.globalAlpha = p.isCircular ? 0.85 : 0.55;
+      }
+      if (p.edgeType === "temporal") {
+        ctx.setLineDash([6 * cam.zoom, 3 * cam.zoom]);
+      } else if (p.edgeType === "data-flow" && !p.isCircular) {
         ctx.setLineDash([4 * cam.zoom, 4 * cam.zoom]);
       } else {
         ctx.setLineDash([]);
@@ -1445,6 +1680,7 @@ canvas#minimap {
       ctx.stroke();
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
+      ctx.shadowBlur = 0;
 
       // Arrow
       if (p.points.length >= 2) {
@@ -1454,6 +1690,7 @@ canvas#minimap {
         var aP = worldToScreen(pPrev[0] * TILE + TILE / 2, pPrev[1] * TILE + TILE / 2);
         var aAngle = Math.atan2(aL[1] - aP[1], aL[0] - aP[0]);
         var aLen = 5 * cam.zoom;
+        if (selectedLoc) ctx.globalAlpha = isConnected ? 0.9 : 0.1;
         ctx.fillStyle = pcolor;
         ctx.beginPath();
         ctx.moveTo(aL[0], aL[1]);
@@ -1461,6 +1698,75 @@ canvas#minimap {
         ctx.lineTo(aL[0] - aLen * Math.cos(aAngle + 0.4), aL[1] - aLen * Math.sin(aAngle + 0.4));
         ctx.closePath();
         ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Flow particles on connected paths
+    if (selectedLoc && selectedPaths.length > 0) {
+      for (var sp = 0; sp < selectedPaths.length; sp++) {
+        var spath = selectedPaths[sp];
+        if (spath.points.length < 2) continue;
+        if (!visibleEdgeTypes[spath.edgeType]) continue;
+        if (currentView !== "kingdom" && !(viewFilters[currentView] || viewFilters.kingdom)(spath)) continue;
+
+        var isOutgoing = spath.sourceId === selectedLoc.id;
+        var particleColor = spath.isCircular ? CURSED_COLOR : (PATH_COLORS[spath.edgeType] || PATH_COLORS["import"]).glow;
+
+        // Compute total path length in screen space and segment info
+        var segments = [];
+        var totalLen = 0;
+        for (var si = 1; si < spath.points.length; si++) {
+          var sa = worldToScreen(spath.points[si - 1][0] * TILE + TILE / 2, spath.points[si - 1][1] * TILE + TILE / 2);
+          var sb = worldToScreen(spath.points[si][0] * TILE + TILE / 2, spath.points[si][1] * TILE + TILE / 2);
+          var sdx = sb[0] - sa[0], sdy = sb[1] - sa[1];
+          var slen = Math.sqrt(sdx * sdx + sdy * sdy);
+          segments.push({ x1: sa[0], y1: sa[1], x2: sb[0], y2: sb[1], len: slen, cumLen: totalLen });
+          totalLen += slen;
+        }
+        if (totalLen < 1) continue;
+
+        for (var pp = 0; pp < PARTICLES_PER_PATH; pp++) {
+          var rawT = (animFrame * PARTICLE_SPEED + pp / PARTICLES_PER_PATH) % 1;
+          var t = isOutgoing ? rawT : 1 - rawT;
+          var dist = t * totalLen;
+
+          // Find segment
+          var seg = segments[segments.length - 1];
+          for (var ssi = 0; ssi < segments.length; ssi++) {
+            if (segments[ssi].cumLen + segments[ssi].len >= dist) {
+              seg = segments[ssi];
+              break;
+            }
+          }
+          var segT = seg.len > 0 ? (dist - seg.cumLen) / seg.len : 0;
+          var px = seg.x1 + (seg.x2 - seg.x1) * segT;
+          var py = seg.y1 + (seg.y2 - seg.y1) * segT;
+
+          var pSize = (isOutgoing ? 3 : 2.5) * cam.zoom;
+          ctx.globalAlpha = isOutgoing ? 0.9 : 0.65;
+          ctx.shadowColor = particleColor;
+          ctx.shadowBlur = 4;
+          ctx.fillStyle = particleColor;
+
+          if (isOutgoing) {
+            // Circle
+            ctx.beginPath();
+            ctx.arc(px, py, pSize, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            // Diamond shape for incoming
+            ctx.beginPath();
+            ctx.moveTo(px, py - pSize);
+            ctx.lineTo(px + pSize, py);
+            ctx.lineTo(px, py + pSize);
+            ctx.lineTo(px - pSize, py);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
       }
     }
 
@@ -1470,9 +1776,42 @@ canvas#minimap {
       var matches = locFilter(loc);
       if (!matches && currentView !== "kingdom") {
         ctx.globalAlpha = 0.2;
+      } else if (selectedLoc) {
+        if (loc.id === selectedLoc.id) {
+          ctx.globalAlpha = 1;
+        } else if (selectedNeighborIds.has(loc.id)) {
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.globalAlpha = 0.3;
+        }
       }
       drawLocation(loc);
       ctx.globalAlpha = 1;
+
+      // Glow ring on connected neighbors
+      if (selectedLoc && selectedNeighborIds.has(loc.id)) {
+        var nwx = loc.gridX * TILE;
+        var nwy = loc.gridY * TILE;
+        var nss = worldToScreen(nwx - 2, nwy - 2);
+        var nsw = (loc.tileSize * TILE + 4) * cam.zoom;
+        // Find edge type color for the connection
+        var ringColor = "#ffdd44";
+        for (var ri = 0; ri < selectedPaths.length; ri++) {
+          var rp = selectedPaths[ri];
+          if (rp.sourceId === loc.id || rp.targetId === loc.id) {
+            ringColor = rp.isCircular ? CURSED_COLOR : (PATH_COLORS[rp.edgeType] || PATH_COLORS["import"]).glow;
+            break;
+          }
+        }
+        ctx.shadowColor = ringColor;
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+        ctx.strokeRect(nss[0], nss[1], nsw, nsw);
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+      }
     }
 
     // Selected highlight
@@ -1495,7 +1834,7 @@ canvas#minimap {
   // === RENDER LOOP ===
   function frame() {
     animFrame++;
-    if (animFrame % 30 === 0) dirty = true;
+    if (selectedLoc ? animFrame % 3 === 0 : animFrame % 30 === 0) dirty = true;
     if (dirty) {
       dirty = false;
       render();

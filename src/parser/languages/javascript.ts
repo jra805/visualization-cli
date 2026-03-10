@@ -86,17 +86,31 @@ function loadPathAliases(rootDir: string): AliasResolver {
     if (!fs.existsSync(configPath)) continue;
 
     try {
-      // Strip comments (// and /* */) and trailing commas for JSON parsing
       let raw = fs.readFileSync(configPath, "utf-8");
-      raw = raw.replace(/\/\/[^\n]*/g, "");
-      raw = raw.replace(/\/\*[\s\S]*?\*\//g, "");
-      raw = raw.replace(/,\s*([\]}])/g, "$1");
-      const config = JSON.parse(raw);
+      // Strip BOM
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+      const config = parseJsonWithComments(raw);
 
       const compilerOptions = config.compilerOptions ?? {};
       baseUrl = compilerOptions.baseUrl;
 
-      const paths = compilerOptions.paths;
+      // Follow one level of "extends" for paths
+      let paths = compilerOptions.paths;
+      if (!paths && config.extends) {
+        try {
+          const extPath = path.resolve(rootDir, config.extends);
+          if (fs.existsSync(extPath)) {
+            let extRaw = fs.readFileSync(extPath, "utf-8");
+            if (extRaw.charCodeAt(0) === 0xFEFF) extRaw = extRaw.slice(1);
+            const extConfig = parseJsonWithComments(extRaw);
+            paths = extConfig.compilerOptions?.paths;
+            if (!baseUrl) baseUrl = extConfig.compilerOptions?.baseUrl;
+          }
+        } catch {
+          // ignore extended config errors
+        }
+      }
+
       if (paths) {
         for (const [pattern, mappings] of Object.entries(paths)) {
           // Convert "@/*" → prefix "@/"
@@ -122,11 +136,82 @@ function loadPathAliases(rootDir: string): AliasResolver {
 
       break; // Use first config found
     } catch {
-      // Config parse error — skip
+      // Config parse error — skip, fallbacks below will handle it
+    }
+  }
+
+  // Fallback: if no @/ alias was found, add common conventions
+  const hasAtAlias = aliases.some((a) => a.prefix === "@/");
+  if (!hasAtAlias) {
+    // Try @/ → src/ (most common Next.js/Vite convention)
+    const srcDir = path.join(rootDir, "src");
+    if (fs.existsSync(srcDir)) {
+      aliases.push({ prefix: "@/", targets: ["src/"] });
+    } else {
+      // Try @/ → ./ (root-level source)
+      aliases.push({ prefix: "@/", targets: [""] });
     }
   }
 
   return { aliases, baseUrl };
+}
+
+/**
+ * Parse JSON with comments (JSONC). Safely strips // and /* comments
+ * without corrupting string values that contain // (like URLs or paths).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseJsonWithComments(raw: string): any {
+  let result = "";
+  let i = 0;
+  let inString = false;
+
+  while (i < raw.length) {
+    const ch = raw[i];
+
+    if (inString) {
+      result += ch;
+      if (ch === "\\") {
+        // Escaped character — copy next char too
+        i++;
+        if (i < raw.length) result += raw[i];
+      } else if (ch === '"') {
+        inString = false;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      result += ch;
+      i++;
+      continue;
+    }
+
+    // Line comment
+    if (ch === "/" && i + 1 < raw.length && raw[i + 1] === "/") {
+      // Skip until end of line
+      while (i < raw.length && raw[i] !== "\n") i++;
+      continue;
+    }
+
+    // Block comment
+    if (ch === "/" && i + 1 < raw.length && raw[i + 1] === "*") {
+      i += 2;
+      while (i + 1 < raw.length && !(raw[i] === "*" && raw[i + 1] === "/")) i++;
+      i += 2; // skip */
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  // Strip trailing commas
+  result = result.replace(/,\s*([\]}])/g, "$1");
+
+  return JSON.parse(result);
 }
 
 /**

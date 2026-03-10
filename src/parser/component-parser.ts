@@ -19,9 +19,14 @@ export function parseComponents(files: string[], rootDir: string): ComponentInfo
 
   const components: ComponentInfo[] = [];
 
+  // Normalize rootDir for path comparison (ts-morph always returns forward slashes)
+  const normalizedRoot = rootDir.split("\\").join("/").replace(/\/$/, "");
+
   for (const sourceFile of project.getSourceFiles()) {
-    const filePath = sourceFile.getFilePath();
-    const relPath = filePath.replace(rootDir + "/", "").replace(/\\/g, "/");
+    const filePath = sourceFile.getFilePath().replace(/\\/g, "/");
+    const relPath = filePath.startsWith(normalizedRoot + "/")
+      ? filePath.slice(normalizedRoot.length + 1)
+      : filePath.replace(rootDir + "/", "").replace(/\\/g, "/");
 
     // Find function declarations that return JSX
     for (const func of sourceFile.getFunctions()) {

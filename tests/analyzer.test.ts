@@ -125,13 +125,13 @@ describe("analyzer", () => {
   });
 
   describe("full analysis", () => {
-    it("produces a complete report", () => {
+    it("produces a complete report", async () => {
       const graph = createGraph();
       addNode(graph, { id: "a.ts", filePath: "a.ts", label: "a", moduleType: "component", loc: 10, directory: "" });
       addNode(graph, { id: "b.ts", filePath: "b.ts", label: "b", moduleType: "util", loc: 10, directory: "" });
       addEdge(graph, { source: "a.ts", target: "b.ts", type: "import" });
 
-      const report = analyze(graph, [], ["a.ts"], []);
+      const report = await analyze(graph, [], ["a.ts"], []);
       expect(report.totalModules).toBe(2);
       expect(report.totalEdges).toBe(1);
     });

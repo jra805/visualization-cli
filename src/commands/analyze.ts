@@ -7,6 +7,7 @@ import { analyze } from "../analyzer/index.js";
 import { render } from "../renderer/index.js";
 
 import type { OutputFormat } from "../renderer/types.js";
+import { applyGrouping } from "../graph/auto-grouper.js";
 
 export interface AnalyzeOptions {
   output: string;
@@ -14,6 +15,8 @@ export interface AnalyzeOptions {
   depth?: number;
   noIssues?: boolean;
   format?: OutputFormat;
+  group?: boolean;
+  groupConfig?: string;
   verbose?: boolean;
 }
 
@@ -22,7 +25,7 @@ export async function analyzeCommand(
   options: AnalyzeOptions
 ): Promise<void> {
   const targetDir = path.resolve(dir);
-  const outputDir = path.resolve(options.output);
+  const outputDir = path.resolve(options.output || targetDir);
 
   // Step 1: Scan
   const scanSpinner = ora("Scanning project...").start();
@@ -67,28 +70,42 @@ export async function analyzeCommand(
 
   // Step 3: Analyze
   const analyzeSpinner = ora("Analyzing architecture...").start();
-  const report = analyze(
+  const report = await analyze(
     parseResult.graph,
     parseResult.circularDeps,
     scanResult.entryPoints,
     parseResult.parseResult.components,
-    { skipIssues: options.noIssues }
+    { skipIssues: options.noIssues, rootDir: targetDir }
   );
   analyzeSpinner.succeed(
     `Analysis complete: ${report.issues.length} issues found`
   );
 
+  // Step 3.5: Optional grouping
+  const groupedGraph = applyGrouping(parseResult.graph, {
+    group: options.group,
+    groupConfig: options.groupConfig,
+  });
+  if (groupedGraph) {
+    const groupCount = groupedGraph.groups.size;
+    const groupedNodeCount = groupedGraph.nodeMembership.size;
+    console.log(
+      chalk.dim(`  Grouped ${groupedNodeCount} modules into ${groupCount} groups`)
+    );
+  }
+
   // Step 4: Render
+  const renderGraph = groupedGraph ?? parseResult.graph;
   const renderSpinner = ora("Generating diagrams...").start();
   try {
     await render(
-      parseResult.graph,
+      renderGraph,
       report,
       parseResult.parseResult.components,
       parseResult.parseResult.dataFlows,
       { outputDir, verbose: options.verbose, format: options.format }
     );
-    const filename = options.format === "mermaid" ? "architecture.html" : options.format === "game" ? "game-map.html" : "interactive.html";
+    const filename = options.format === "mermaid" ? "architecture.html" : options.format === "game" ? "game-map.html" : options.format === "treemap" ? "treemap.html" : options.format === "svg" ? "architecture.svg" : "interactive.html";
     renderSpinner.succeed(
       `Visualization opened in browser → ${chalk.cyan(outputDir + "/" + filename)}`
     );

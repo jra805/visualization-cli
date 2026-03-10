@@ -6,7 +6,9 @@ export type IssueType =
   | "high-coupling"
   | "god-module"
   | "prop-drilling"
-  | "layering-violation";
+  | "layering-violation"
+  | "hotspot"
+  | "temporal-coupling";
 
 export interface Issue {
   type: IssueType;
@@ -22,6 +24,22 @@ export type ArchitecturePattern =
   | "modular"
   | "unknown";
 
+export interface HotspotData {
+  complexity: number;
+  normalizedComplexity: number;
+  changeFrequency: number;
+  changeCount: number;
+  hotspotScore: number;
+  isHotspot: boolean;
+}
+
+export interface TemporalCoupling {
+  fileA: string;
+  fileB: string;
+  coChangeCount: number;
+  confidence: number;
+}
+
 export interface ArchReport {
   totalModules: number;
   totalEdges: number;
@@ -30,4 +48,6 @@ export interface ArchReport {
   orphans: string[];
   topCoupled: { file: string; fanIn: number; fanOut: number }[];
   architecturePattern?: ArchitecturePattern;
+  hotspots?: Map<string, HotspotData>;
+  temporalCouplings?: TemporalCoupling[];
 }
