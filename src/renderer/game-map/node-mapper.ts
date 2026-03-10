@@ -3,15 +3,15 @@ import type { ComponentInfo, ComponentDataFlow } from "../../parser/types.js";
 import type { GraphMetrics } from "../../analyzer/graph-metrics.js";
 
 export type BiomeType =
-  | "forest"    // UI components
-  | "coastal"   // API/data fetching
-  | "mountain"  // State, core logic, services
-  | "plains"    // Utilities, helpers
-  | "desert"    // Types, interfaces, models
-  | "swamp"     // Test files
-  | "volcanic"  // Circular dependency clusters
-  | "crystal"   // Infrastructure, config, hooks
-  | "castle";   // Entry points
+  | "forest"    // UI components — dense woodland settlements
+  | "coastal"   // API/controllers — port towns, data harbors
+  | "mountain"  // Data layer — mining camps (repository, model, entity)
+  | "plains"    // Utilities, helpers — open farmland
+  | "desert"    // Types, interfaces — ancient scrolls in arid lands
+  | "swamp"     // Test files — murky testing grounds
+  | "volcanic"  // Circular dependency clusters — cursed lands
+  | "crystal"   // Hooks, config — enchanted groves
+  | "castle";   // Entry points, stores — fortified strongholds
 
 export interface GameLocation {
   id: string;
@@ -119,16 +119,25 @@ const LOCATION_NAMES: Record<string, Record<string, string>> = {
 
 // ── Biome assignment by module type ──
 const MODULE_BIOME: Record<string, BiomeType> = {
+  // UI components — forest villages
   component: "forest", page: "forest", layout: "forest", directive: "forest",
-  hook: "crystal", composable: "crystal", context: "crystal",
+  // Hooks & config — enchanted crystal groves
+  hook: "crystal", composable: "crystal", context: "crystal", config: "crystal",
+  // API/controllers — coastal port towns (data harbors)
   "api-route": "coastal", controller: "coastal", "route-config": "coastal",
-  interceptor: "coastal",
-  service: "mountain", middleware: "mountain", guard: "mountain", validator: "mountain",
-  store: "mountain", repository: "mountain",
-  model: "desert", entity: "desert", dto: "desert", type: "desert",
-  migration: "desert", serializer: "desert",
+  interceptor: "coastal", middleware: "coastal",
+  // Data layer — mountain mining camps (mining data)
+  repository: "mountain", model: "mountain", entity: "mountain",
+  dto: "mountain", migration: "mountain", serializer: "mountain",
+  // Services & state — castle strongholds
+  service: "castle", store: "castle", guard: "castle", validator: "castle",
+  // Types & interfaces — desert scrolls
+  type: "desert",
+  // Utilities — open farmland plains
   util: "plains", decorator: "plains",
-  config: "crystal", "entry-point": "castle",
+  // Entry points — castle keeps
+  "entry-point": "castle",
+  // Tests — swamp testing grounds
   test: "swamp",
   unknown: "plains",
 };

@@ -47,6 +47,30 @@ describe("analyzer", () => {
       expect(orphans).not.toContain("used.ts");
     });
 
+    it("does not count modules with outgoing connections as orphans", () => {
+      const graph = createGraph();
+      addNode(graph, {
+        id: "top-level.ts",
+        filePath: "top-level.ts",
+        label: "top-level",
+        moduleType: "component",
+        loc: 50,
+        directory: "",
+      });
+      addNode(graph, {
+        id: "dep.ts",
+        filePath: "dep.ts",
+        label: "dep",
+        moduleType: "util",
+        loc: 20,
+        directory: "",
+      });
+      addEdge(graph, { source: "top-level.ts", target: "dep.ts", type: "import" });
+
+      const { orphans } = detectOrphans(graph, []);
+      expect(orphans).not.toContain("top-level.ts");
+    });
+
     it("does not count framework entry points as orphans", () => {
       const graph = createGraph();
       const standaloneTypes = [

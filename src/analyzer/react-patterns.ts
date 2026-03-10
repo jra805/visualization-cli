@@ -39,7 +39,7 @@ export function detectPropDrilling(
 
   // God components: too many children or too many hooks
   for (const comp of components) {
-    if (comp.childComponents.length > 10) {
+    if (comp.childComponents.length > 20) {
       issues.push({
         type: "god-module",
         severity: "warning",
@@ -48,7 +48,7 @@ export function detectPropDrilling(
       });
     }
 
-    if (comp.hooksUsed.length > 8) {
+    if (comp.hooksUsed.length > 15) {
       issues.push({
         type: "high-coupling",
         severity: "warning",

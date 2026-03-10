@@ -128,26 +128,37 @@ export function generateTerrain(
           terrain[y][x] = Math.floor(rng() * 4); // GRASS1-4
         }
       } else if (biome) {
-        // Inside a biome region: biome-specific terrain
+        // Inside a biome region: heavily biome-themed terrain
         const bt = BIOME_TERRAIN[biome];
-        if (n > 0.8) {
+        if (n > 0.75) {
           terrain[y][x] = bt.secondary;
-        } else if (n > 0.55) {
+        } else if (n > 0.45) {
           terrain[y][x] = bt.primary;
-        } else if (n > 0.4) {
+        } else if (n > 0.25) {
           terrain[y][x] = bt.accent;
         } else {
-          terrain[y][x] = Math.floor(rng() * 4); // grass base
+          terrain[y][x] = bt.primary; // fill remaining with primary biome
         }
-      } else if (edgeDist <= 2 && n > 0.4) {
-        // Mountains at edges (border terrain)
-        terrain[y][x] = TERRAIN.MOUNTAIN;
-      } else if (n > 0.75) {
-        terrain[y][x] = TERRAIN.FOREST;
-      } else if (n > 0.7 && edgeDist > 4) {
-        terrain[y][x] = TERRAIN.WATER;
       } else {
-        terrain[y][x] = Math.floor(rng() * 4); // GRASS1-4
+        // Wilderness between regions — varied natural terrain
+        if (edgeDist <= 2 && n > 0.35) {
+          terrain[y][x] = TERRAIN.MOUNTAIN; // mountain border ring
+        } else if (edgeDist <= 4 && n > 0.6) {
+          terrain[y][x] = rng() > 0.5 ? TERRAIN.MOUNTAIN : TERRAIN.SNOW;
+        } else if (n > 0.78) {
+          terrain[y][x] = TERRAIN.FOREST;
+        } else if (n > 0.72) {
+          terrain[y][x] = TERRAIN.DARK_GRASS;
+        } else if (n > 0.68 && edgeDist > 5) {
+          terrain[y][x] = TERRAIN.WATER;
+        } else if (n > 0.62) {
+          terrain[y][x] = TERRAIN.FOREST;
+        } else if (n > 0.52) {
+          // Mix of flower meadows and grass
+          terrain[y][x] = rng() > 0.7 ? TERRAIN.FLOWER : Math.floor(rng() * 4);
+        } else {
+          terrain[y][x] = Math.floor(rng() * 4); // GRASS1-4
+        }
       }
     }
   }

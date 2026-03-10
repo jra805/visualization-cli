@@ -1,6 +1,6 @@
 import type { Graph, ModuleType } from "../graph/types.js";
 import type { Issue } from "./types.js";
-import { fanIn } from "../graph/index.js";
+import { fanIn, fanOut } from "../graph/index.js";
 
 /**
  * Module types that are naturally standalone — consumed by external tools,
@@ -25,7 +25,8 @@ export function detectOrphans(graph: Graph, entryPoints: string[]): { orphans: s
     if (EXPECTED_STANDALONE.has(node.moduleType)) continue;
     if (entryPoints.includes(id)) continue;
 
-    if (fanIn(graph, id) === 0) {
+    // True orphan: nothing imports it AND it imports nothing (fully disconnected)
+    if (fanIn(graph, id) === 0 && fanOut(graph, id) === 0) {
       orphans.push(id);
     }
   }

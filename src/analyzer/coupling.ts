@@ -19,8 +19,8 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
     const fo = fanOut(graph, id);
     scores.push({ file: id, fanIn: fi, fanOut: fo });
 
-    // God module: high fan-out or very large
-    if (fo > 10) {
+    // God module: extremely high fan-out or very large
+    if (fo > 20) {
       issues.push({
         type: "god-module",
         severity: "warning",
@@ -29,7 +29,7 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
       });
     }
 
-    if (node.loc > 500) {
+    if (node.loc > 1000) {
       issues.push({
         type: "god-module",
         severity: "warning",
@@ -39,7 +39,7 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
     }
 
     // High coupling: both high fan-in and fan-out
-    if (fi > 5 && fo > 5) {
+    if (fi > 10 && fo > 10) {
       issues.push({
         type: "high-coupling",
         severity: "warning",
