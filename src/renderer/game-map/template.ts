@@ -1002,6 +1002,14 @@ canvas#minimap {
     ctx.translate(px, py);
     ctx.scale(scale, scale);
 
+    // Dark ground pad for contrast against grass terrain
+    var padSize = loc.tileSize * TILE;
+    var padMargin = 2;
+    ctx.fillStyle = "rgba(15, 12, 8, 0.55)";
+    ctx.fillRect(-padMargin, -padMargin, padSize + padMargin * 2, padSize + padMargin * 2);
+    ctx.fillStyle = "rgba(30, 25, 18, 0.35)";
+    ctx.fillRect(-padMargin - 1, -padMargin - 1, padSize + padMargin * 2 + 2, padSize + padMargin * 2 + 2);
+
     // Orphan: ghostly transparency
     if (loc.isOrphan) ctx.globalAlpha = 0.45;
 
@@ -1067,7 +1075,7 @@ canvas#minimap {
   var viewFilters = {
     kingdom:  function() { return true; },
     command:  function(p) { return p.edgeType === "renders"; },
-    supply:   function(p) { return p.edgeType === "data-flow"; },
+    supply:   function(p) { return p.edgeType === "import" || p.edgeType === "data-flow"; },
     threat:   function(p) { return p.isCircular; }
   };
 
@@ -1078,10 +1086,7 @@ canvas#minimap {
              loc.moduleType === "layout" || loc.moduleType === "directive";
     },
     supply: function(loc) {
-      return (loc.dataFlow && loc.dataFlow.dataSources && loc.dataFlow.dataSources.length > 0) ||
-             loc.moduleType === "store" || loc.moduleType === "context" ||
-             loc.moduleType === "api-route" || loc.moduleType === "service" ||
-             loc.moduleType === "repository";
+      return loc.fanIn > 0 || loc.fanOut > 0;
     },
     threat: function(loc) {
       return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge;

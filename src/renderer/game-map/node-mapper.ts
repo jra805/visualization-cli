@@ -44,44 +44,44 @@ export interface GameLocation {
 
 // ── Color palette per module type ──
 const MODULE_COLORS: Record<string, { main: string; dark: string }> = {
-  // Frontend presentation
-  component:    { main: "#5B8DD9", dark: "#3B6DB9" },
-  page:         { main: "#9B6BB0", dark: "#7B4B90" },
-  layout:       { main: "#7B68AE", dark: "#5B488E" },
-  directive:    { main: "#6B8BC0", dark: "#4B6BA0" },
-  // Frontend logic
-  hook:         { main: "#4CAF7D", dark: "#2C8F5D" },
-  composable:   { main: "#4CAF7D", dark: "#2C8F5D" },
-  store:        { main: "#CF5C5C", dark: "#AF3C3C" },
-  context:      { main: "#45B5AA", dark: "#25958A" },
-  // Backend entry
-  controller:   { main: "#D4854A", dark: "#B4652A" },
-  "api-route":  { main: "#D4854A", dark: "#B4652A" },
-  "route-config": { main: "#C0753A", dark: "#A0552A" },
-  // Backend middleware
-  middleware:   { main: "#C4A265", dark: "#A48245" },
-  guard:        { main: "#B08050", dark: "#906030" },
-  interceptor:  { main: "#B8925A", dark: "#98723A" },
-  validator:    { main: "#A89060", dark: "#887040" },
-  // Backend business
-  service:      { main: "#6A9BD1", dark: "#4A7BB1" },
-  // Data
-  repository:   { main: "#8B7D6B", dark: "#6B5D4B" },
-  model:        { main: "#A09080", dark: "#807060" },
-  entity:       { main: "#A09080", dark: "#807060" },
-  dto:          { main: "#90A090", dark: "#708070" },
-  migration:    { main: "#7A6A5A", dark: "#5A4A3A" },
-  // Infrastructure
-  config:       { main: "#6A8AAA", dark: "#4A6A8A" },
-  "entry-point": { main: "#D4A017", dark: "#B48017" },
-  // Cross-cutting
-  type:         { main: "#A0A8B0", dark: "#808890" },
-  util:         { main: "#8E99A4", dark: "#6E7984" },
-  decorator:    { main: "#9A8ABB", dark: "#7A6A9B" },
-  serializer:   { main: "#8A9A80", dark: "#6A7A60" },
-  // Test & fallback
-  test:         { main: "#7F8C8D", dark: "#5F6C6D" },
-  unknown:      { main: "#6B7280", dark: "#4B5260" },
+  // Frontend presentation — warm / saturated blues & purples
+  component:    { main: "#4A7AE8", dark: "#2850A8" },
+  page:         { main: "#B050D0", dark: "#7A2890" },
+  layout:       { main: "#8858D0", dark: "#5830A0" },
+  directive:    { main: "#5878D0", dark: "#3050A0" },
+  // Frontend logic — vivid greens, reds, teals
+  hook:         { main: "#30B868", dark: "#18803A" },
+  composable:   { main: "#30B868", dark: "#18803A" },
+  store:        { main: "#E04848", dark: "#A82020" },
+  context:      { main: "#20C0B0", dark: "#108878" },
+  // Backend entry — bright orange
+  controller:   { main: "#E88030", dark: "#B85810" },
+  "api-route":  { main: "#E88030", dark: "#B85810" },
+  "route-config": { main: "#D07028", dark: "#A04810" },
+  // Backend middleware — warm golds & tans
+  middleware:   { main: "#D4A030", dark: "#A07818" },
+  guard:        { main: "#C88828", dark: "#985810" },
+  interceptor:  { main: "#C89838", dark: "#986818" },
+  validator:    { main: "#B89030", dark: "#886010" },
+  // Backend business — bright blue
+  service:      { main: "#4890E0", dark: "#2060B0" },
+  // Data — warm browns & earthy tones (distinct from green terrain)
+  repository:   { main: "#A07050", dark: "#704020" },
+  model:        { main: "#B88060", dark: "#885030" },
+  entity:       { main: "#B88060", dark: "#885030" },
+  dto:          { main: "#88A060", dark: "#587030" },
+  migration:    { main: "#907050", dark: "#604020" },
+  // Infrastructure — teal & gold
+  config:       { main: "#3898C0", dark: "#186888" },
+  "entry-point": { main: "#E8B020", dark: "#B88010" },
+  // Cross-cutting — cool slate & lavender (still distinct from grass)
+  type:         { main: "#8088C0", dark: "#505890" },
+  util:         { main: "#7080A8", dark: "#405078" },
+  decorator:    { main: "#9870D0", dark: "#6840A0" },
+  serializer:   { main: "#709048", dark: "#486020" },
+  // Test & fallback — muted but visible
+  test:         { main: "#606878", dark: "#404850" },
+  unknown:      { main: "#585E70", dark: "#383E50" },
 };
 
 // ── Location names per module type & size ──

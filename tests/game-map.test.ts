@@ -52,7 +52,7 @@ describe("game-map", () => {
       const app = locations.find((l) => l.label === "App")!;
       expect(app.moduleType).toBe("component");
       expect(app.sizeCategory).toBe("medium"); // loc=100, fan=3
-      expect(app.colorMain).toBe("#5B8DD9");
+      expect(app.colorMain).toBe("#4A7AE8");
 
       const hook = locations.find((l) => l.label === "useAuth")!;
       expect(hook.moduleType).toBe("hook");

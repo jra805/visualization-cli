@@ -394,28 +394,38 @@ export function generateInteractiveHtml(
   });
 
   // Layout helper: dagre if available, otherwise cose (built-in force-directed)
+  // Parameters scale with visible node count for readable layouts at any size.
   function runLayout(overrides) {
+    var visibleNodes = cy.nodes(':visible').length || 1;
     var opts;
     if (hasDagre) {
+      // Scale spacing so larger graphs spread out more
+      var nodeSep = Math.max(60, Math.min(120, 40 + visibleNodes));
+      var rankSep = Math.max(100, Math.min(200, 60 + visibleNodes * 1.5));
       opts = {
         name: 'dagre',
         rankDir: 'LR',
-        nodeSep: 60,
-        rankSep: 100,
+        nodeSep: nodeSep,
+        rankSep: rankSep,
         fit: true,
-        padding: 30,
+        padding: 40,
         animate: false
       };
     } else {
+      // Scale repulsion & edge length for larger graphs
+      var repulsion = Math.max(8000, 4000 + visibleNodes * 200);
+      var edgeLen = Math.max(100, 60 + visibleNodes * 2);
+      // Lower gravity for larger graphs so clusters spread apart
+      var grav = Math.max(0.05, 0.3 - visibleNodes * 0.003);
       opts = {
         name: 'cose',
         fit: true,
-        padding: 30,
-        nodeRepulsion: function() { return 8000; },
-        idealEdgeLength: function() { return 100; },
+        padding: 40,
+        nodeRepulsion: function() { return repulsion; },
+        idealEdgeLength: function() { return edgeLen; },
         edgeElasticity: function() { return 100; },
-        gravity: 0.25,
-        numIter: 1000,
+        gravity: grav,
+        numIter: Math.max(1000, 500 + visibleNodes * 20),
         animate: false
       };
     }

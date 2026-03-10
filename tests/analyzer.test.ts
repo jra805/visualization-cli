@@ -47,6 +47,26 @@ describe("analyzer", () => {
       expect(orphans).not.toContain("used.ts");
     });
 
+    it("does not count framework entry points as orphans", () => {
+      const graph = createGraph();
+      const standaloneTypes = [
+        { id: "next.config.ts", moduleType: "config" as const },
+        { id: "migrations/001.ts", moduleType: "migration" as const },
+        { id: "app/page.tsx", moduleType: "page" as const },
+        { id: "app/layout.tsx", moduleType: "layout" as const },
+        { id: "app/api/route.ts", moduleType: "api-route" as const },
+        { id: "users.controller.ts", moduleType: "controller" as const },
+      ];
+      for (const { id, moduleType } of standaloneTypes) {
+        addNode(graph, { id, filePath: id, label: id, moduleType, loc: 20, directory: "" });
+      }
+
+      const { orphans } = detectOrphans(graph, []);
+      for (const { id } of standaloneTypes) {
+        expect(orphans).not.toContain(id);
+      }
+    });
+
     it("does not count entry points as orphans", () => {
       const graph = createGraph();
       addNode(graph, {
