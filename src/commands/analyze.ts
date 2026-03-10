@@ -1,0 +1,93 @@
+import ora from "ora";
+import chalk from "chalk";
+import path from "node:path";
+import { scan } from "../scanner/index.js";
+import { parse } from "../parser/index.js";
+import { analyze } from "../analyzer/index.js";
+import { render } from "../renderer/index.js";
+
+export interface AnalyzeOptions {
+  output: string;
+  focus?: string;
+  depth?: number;
+  noIssues?: boolean;
+  verbose?: boolean;
+}
+
+export async function analyzeCommand(
+  dir: string,
+  options: AnalyzeOptions
+): Promise<void> {
+  const targetDir = path.resolve(dir);
+  const outputDir = path.resolve(options.output);
+
+  // Step 1: Scan
+  const scanSpinner = ora("Scanning project...").start();
+  let scanResult;
+  try {
+    scanResult = await scan(targetDir, {
+      focus: options.focus,
+      depth: options.depth,
+    });
+    scanSpinner.succeed(
+      `Found ${scanResult.files.length} files (${scanResult.framework}${scanResult.hasTypeScript ? " + TypeScript" : ""})`
+    );
+  } catch (error) {
+    scanSpinner.fail("Scan failed");
+    console.error(chalk.red((error as Error).message));
+    process.exit(1);
+  }
+
+  if (scanResult.files.length === 0) {
+    console.log(chalk.yellow("No source files found. Is this a JS/TS project?"));
+    process.exit(0);
+  }
+
+  // Step 2: Parse
+  const parseSpinner = ora("Parsing dependencies and components...").start();
+  let parseResult;
+  try {
+    parseResult = await parse(scanResult);
+    parseSpinner.succeed(
+      `Parsed ${parseResult.graph.nodes.size} modules, ${parseResult.parseResult.components.length} components`
+    );
+  } catch (error) {
+    parseSpinner.fail("Parse failed");
+    if (options.verbose) {
+      console.error(chalk.red((error as Error).message));
+    }
+    process.exit(1);
+  }
+
+  // Step 3: Analyze
+  const analyzeSpinner = ora("Analyzing architecture...").start();
+  const report = analyze(
+    parseResult.graph,
+    parseResult.circularDeps,
+    scanResult.entryPoints,
+    parseResult.parseResult.components,
+    { skipIssues: options.noIssues }
+  );
+  analyzeSpinner.succeed(
+    `Analysis complete: ${report.issues.length} issues found`
+  );
+
+  // Step 4: Render
+  const renderSpinner = ora("Generating diagrams...").start();
+  try {
+    await render(
+      parseResult.graph,
+      report,
+      parseResult.parseResult.components,
+      parseResult.parseResult.dataFlows,
+      { outputDir, verbose: options.verbose }
+    );
+    renderSpinner.succeed(
+      `Visualization opened in browser → ${chalk.cyan(outputDir + "/architecture.html")}`
+    );
+  } catch (error) {
+    renderSpinner.fail("Render failed");
+    console.error(chalk.red((error as Error).message));
+    process.exit(1);
+  }
+}

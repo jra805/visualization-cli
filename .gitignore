@@ -1,0 +1,5 @@
+node_modules/
+dist/
+viz-output/
+viz-output-*/
+*.tsbuildinfo

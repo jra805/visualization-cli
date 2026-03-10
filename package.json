@@ -1,0 +1,31 @@
+{
+  "name": "viz-cli",
+  "version": "0.1.0",
+  "description": "Analyze React/Next.js projects and generate Mermaid architecture diagrams",
+  "type": "module",
+  "bin": {
+    "viz-cli": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": ["react", "nextjs", "architecture", "mermaid", "diagram", "cli"],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "globby": "^14.0.2",
+    "ora": "^8.1.0",
+    "skott": "^0.35.2",
+    "ts-morph": "^24.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
+}
