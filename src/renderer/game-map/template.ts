@@ -284,8 +284,8 @@ canvas#minimap {
 
 <div class="tabs">
   <button class="tab active" data-view="kingdom">Kingdom Overview</button>
-  <button class="tab" data-view="command">Command Chain</button>
-  <button class="tab" data-view="supply">Supply Lines</button>
+  <button class="tab" data-view="trade">Trade Routes</button>
+  <button class="tab" data-view="stronghold">Strongholds</button>
   <button class="tab" data-view="threat">Threat Map</button>
 </div>
 
@@ -323,9 +323,8 @@ canvas#minimap {
     <div class="legend-item"><div class="legend-dot" style="background:#88aacc"></div> Crystal (Infra)</div>
     <div class="legend-item"><div class="legend-dot" style="background:#aa8844"></div> Castle (Entry)</div>
     <div style="margin:6px 0;color:#d4a017">-- Routes --</div>
-    <div class="legend-item"><div class="legend-line" style="background:#c4a265"></div> Import (Road)</div>
-    <div class="legend-item"><div class="legend-line" style="background:#d4a017"></div> Renders (Highway)</div>
-    <div class="legend-item"><div class="legend-line" style="background:#4488cc"></div> Data Flow (River)</div>
+    <div class="legend-item"><div class="legend-line" style="background:#c4a265"></div> Local (Road)</div>
+    <div class="legend-item"><div class="legend-line" style="background:#d4a017"></div> Cross-Region (Highway)</div>
     <div class="legend-item"><div class="legend-line" style="background:#cc3333"></div> Circular (Cursed)</div>
     <div style="margin:6px 0;color:#d4a017">-- Markers --</div>
     <div class="legend-item" style="color:#cc3333">!! Cursed = Circular Dep</div>
@@ -340,9 +339,8 @@ canvas#minimap {
 
   <div class="controls">
     <div class="toggle-row">
-      <button class="ctrl-btn active" data-toggle="import" title="Toggle import roads">Roads</button>
-      <button class="ctrl-btn active" data-toggle="renders" title="Toggle render highways">Highways</button>
-      <button class="ctrl-btn active" data-toggle="data-flow" title="Toggle data flow rivers">Rivers</button>
+      <button class="ctrl-btn active" data-toggle="road" title="Toggle local roads">Roads</button>
+      <button class="ctrl-btn active" data-toggle="highway" title="Toggle cross-region highways">Highways</button>
     </div>
     <button class="ctrl-btn" id="btn-zoom-in" title="Zoom in">[ + ]</button>
     <button class="ctrl-btn" id="btn-zoom-out" title="Zoom out">[ - ]</button>
@@ -393,12 +391,9 @@ canvas#minimap {
     castle:   { base: "#8a7a60", accent: "#aa9470" }
   };
 
-  var PATH_COLORS = {
-    "import":    { main: "#c4a265", glow: "#d4b275" },
-    "renders":   { main: "#d4a017", glow: "#e4b027" },
-    "data-flow": { main: "#4488cc", glow: "#66aaee" },
-    "temporal":  { main: "#f59e0b", glow: "#fbbf24" }
-  };
+  var ROAD_COLOR =    { main: "#c4a265", glow: "#d4b275" };  // local (same region)
+  var HIGHWAY_COLOR = { main: "#d4a017", glow: "#e4b027" };  // cross-region
+  var TEMPORAL_COLOR = { main: "#f59e0b", glow: "#fbbf24" };
   var CURSED_COLOR = "#cc3333";
 
   // === CANVAS SETUP ===
@@ -1250,25 +1245,56 @@ canvas#minimap {
   }
 
   // === DRAWING: PATHS ===
-  var visibleEdgeTypes = { "import": true, "renders": true, "data-flow": true, "temporal": true };
+  var visibleEdgeTypes = { "road": true, "highway": true, "temporal": true };
+
+  function getPathColors(p) {
+    if (p.isCircular) return { main: CURSED_COLOR, glow: CURSED_COLOR };
+    if (p.edgeType === "temporal") return TEMPORAL_COLOR;
+    return p.isCrossRegion ? HIGHWAY_COLOR : ROAD_COLOR;
+  }
+  function getPathRouteType(p) {
+    if (p.edgeType === "temporal") return "temporal";
+    return p.isCrossRegion ? "highway" : "road";
+  }
+
+  // Precompute trade hub nodes: modules depended on by 2+ files
+  var tradeHubIds = new Set();
+  for (var thi = 0; thi < locations.length; thi++) {
+    if (locations[thi].fanIn >= 2) {
+      tradeHubIds.add(locations[thi].id);
+    }
+  }
+
+  // Precompute stronghold nodes: top 20% by importance + bridges + entry points
+  var sortedByImportance = locations.slice().sort(function(a, b) { return b.importance - a.importance; });
+  var importanceThreshold = sortedByImportance[Math.max(0, Math.floor(locations.length * 0.2) - 1)]
+    ? sortedByImportance[Math.max(0, Math.floor(locations.length * 0.2) - 1)].importance
+    : 0;
+  var strongholdIds = new Set();
+  for (var shi = 0; shi < locations.length; shi++) {
+    var shl = locations[shi];
+    if (shl.importance >= importanceThreshold || shl.isBridge || shl.isGodModule ||
+        shl.moduleType === "entry-point" || shl.fanIn >= 3) {
+      strongholdIds.add(shl.id);
+    }
+  }
 
   // === VIEW MODES ===
   var currentView = "kingdom";
   var viewFilters = {
-    kingdom:  function() { return true; },
-    command:  function(p) { return p.edgeType === "renders"; },
-    supply:   function(p) { return p.edgeType === "import" || p.edgeType === "data-flow"; },
-    threat:   function(p) { return p.isCircular; }
+    kingdom:    function() { return true; },
+    trade:      function(p) { return tradeHubIds.has(p.targetId) || tradeHubIds.has(p.sourceId); },
+    stronghold: function(p) { return strongholdIds.has(p.sourceId) || strongholdIds.has(p.targetId); },
+    threat:     function(p) { return p.isCircular; }
   };
 
   var viewLocFilters = {
     kingdom: function() { return true; },
-    command: function(loc) {
-      return loc.moduleType === "component" || loc.moduleType === "page" ||
-             loc.moduleType === "layout" || loc.moduleType === "directive";
+    trade: function(loc) {
+      return tradeHubIds.has(loc.id);
     },
-    supply: function(loc) {
-      return loc.fanIn > 0 || loc.fanOut > 0;
+    stronghold: function(loc) {
+      return strongholdIds.has(loc.id);
     },
     threat: function(loc) {
       return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge || loc.isHotspot;
@@ -1615,7 +1641,7 @@ canvas#minimap {
 
     // Draw paths (filtered by view mode + toggles)
     var filteredPaths = paths.filter(function(p) {
-      return pathFilter(p) && visibleEdgeTypes[p.edgeType];
+      return pathFilter(p) && visibleEdgeTypes[getPathRouteType(p)];
     });
 
     if (currentView === "threat") {
@@ -1636,10 +1662,11 @@ canvas#minimap {
     for (var pi = 0; pi < filteredPaths.length; pi++) {
       var p = filteredPaths[pi];
       if (p.points.length < 2) continue;
-      var pcolor = p.isCircular ? CURSED_COLOR : (PATH_COLORS[p.edgeType] || PATH_COLORS["import"]).main;
-      var glowColor = p.isCircular ? CURSED_COLOR : (PATH_COLORS[p.edgeType] || PATH_COLORS["import"]).glow;
-      // Path width scales with importance
-      var baseWidth = p.isCircular ? 3 : (p.edgeType === "renders" ? 2.5 : 1.5);
+      var pc = getPathColors(p);
+      var pcolor = pc.main;
+      var glowColor = pc.glow;
+      // Path width: highways are thicker than roads
+      var baseWidth = p.isCircular ? 3 : (p.isCrossRegion ? 2.5 : 1.5);
       var impScale = p.importance ? Math.min(1.5, 0.8 + p.importance / 40) : 1;
       var pwidth = baseWidth * impScale * cam.zoom;
 
@@ -1672,8 +1699,6 @@ canvas#minimap {
       }
       if (p.edgeType === "temporal") {
         ctx.setLineDash([6 * cam.zoom, 3 * cam.zoom]);
-      } else if (p.edgeType === "data-flow" && !p.isCircular) {
-        ctx.setLineDash([4 * cam.zoom, 4 * cam.zoom]);
       } else {
         ctx.setLineDash([]);
       }
@@ -1707,11 +1732,11 @@ canvas#minimap {
       for (var sp = 0; sp < selectedPaths.length; sp++) {
         var spath = selectedPaths[sp];
         if (spath.points.length < 2) continue;
-        if (!visibleEdgeTypes[spath.edgeType]) continue;
+        if (!visibleEdgeTypes[getPathRouteType(spath)]) continue;
         if (currentView !== "kingdom" && !(viewFilters[currentView] || viewFilters.kingdom)(spath)) continue;
 
         var isOutgoing = spath.sourceId === selectedLoc.id;
-        var particleColor = spath.isCircular ? CURSED_COLOR : (PATH_COLORS[spath.edgeType] || PATH_COLORS["import"]).glow;
+        var particleColor = getPathColors(spath).glow;
 
         // Compute total path length in screen space and segment info
         var segments = [];
@@ -1799,7 +1824,7 @@ canvas#minimap {
         for (var ri = 0; ri < selectedPaths.length; ri++) {
           var rp = selectedPaths[ri];
           if (rp.sourceId === loc.id || rp.targetId === loc.id) {
-            ringColor = rp.isCircular ? CURSED_COLOR : (PATH_COLORS[rp.edgeType] || PATH_COLORS["import"]).glow;
+            ringColor = getPathColors(rp).glow;
             break;
           }
         }

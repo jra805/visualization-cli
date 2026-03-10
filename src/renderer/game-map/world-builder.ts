@@ -29,6 +29,7 @@ export interface GamePath {
   targetId: string;
   edgeType: string;
   isCircular: boolean;
+  isCrossRegion: boolean; // true = highway (crosses community boundary)
   importance: number; // path width hint based on connected node importance
   points: [number, number][];
 }
@@ -315,6 +316,7 @@ export function routePaths(
       targetId: edge.data.target,
       edgeType: edge.data.type,
       isCircular: edge.data.isCircular,
+      isCrossRegion: src.community !== tgt.community,
       importance,
       points,
     });
