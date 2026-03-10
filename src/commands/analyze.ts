@@ -6,11 +6,14 @@ import { parse } from "../parser/index.js";
 import { analyze } from "../analyzer/index.js";
 import { render } from "../renderer/index.js";
 
+import type { OutputFormat } from "../renderer/types.js";
+
 export interface AnalyzeOptions {
   output: string;
   focus?: string;
   depth?: number;
   noIssues?: boolean;
+  format?: OutputFormat;
   verbose?: boolean;
 }
 
@@ -80,10 +83,11 @@ export async function analyzeCommand(
       report,
       parseResult.parseResult.components,
       parseResult.parseResult.dataFlows,
-      { outputDir, verbose: options.verbose }
+      { outputDir, verbose: options.verbose, format: options.format }
     );
+    const filename = options.format === "mermaid" ? "architecture.html" : "interactive.html";
     renderSpinner.succeed(
-      `Visualization opened in browser → ${chalk.cyan(outputDir + "/architecture.html")}`
+      `Visualization opened in browser → ${chalk.cyan(outputDir + "/" + filename)}`
     );
   } catch (error) {
     renderSpinner.fail("Render failed");

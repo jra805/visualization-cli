@@ -18,6 +18,7 @@ program
   .option("--focus <path>", "Focus analysis on a specific subdirectory")
   .option("--depth <n>", "Max directory depth to analyze", parseInt)
   .option("--no-issues", "Skip issue detection, diagrams only")
+  .option("--format <type>", "Output format: interactive (default) or mermaid", "interactive")
   .option("-v, --verbose", "Verbose logging")
   .action(async (dir, options) => {
     await analyzeCommand(dir, options);

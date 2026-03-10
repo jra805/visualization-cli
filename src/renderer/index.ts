@@ -7,6 +7,7 @@ import type { ComponentInfo, ComponentDataFlow } from "../parser/types.js";
 import type { RenderOptions } from "./types.js";
 import { generateMermaidDiagrams } from "./mermaid/index.js";
 import { generateHtml } from "./html.js";
+import { generateInteractiveHtml } from "./interactive-html.js";
 
 export async function render(
   graph: Graph,
@@ -15,13 +16,21 @@ export async function render(
   dataFlows: ComponentDataFlow[],
   options: RenderOptions
 ): Promise<void> {
-  const diagrams = generateMermaidDiagrams(graph, report, components, dataFlows);
-  const html = generateHtml(diagrams, report);
-
   fs.mkdirSync(options.outputDir, { recursive: true });
 
-  const outputPath = path.join(options.outputDir, "architecture.html");
-  fs.writeFileSync(outputPath, html, "utf-8");
+  const format = options.format ?? "interactive";
+  let outputPath: string;
+
+  if (format === "mermaid") {
+    const diagrams = generateMermaidDiagrams(graph, report, components, dataFlows);
+    const html = generateHtml(diagrams, report);
+    outputPath = path.join(options.outputDir, "architecture.html");
+    fs.writeFileSync(outputPath, html, "utf-8");
+  } else {
+    const html = generateInteractiveHtml(graph, report, components, dataFlows);
+    outputPath = path.join(options.outputDir, "interactive.html");
+    fs.writeFileSync(outputPath, html, "utf-8");
+  }
 
   // Open in browser
   const absPath = path.resolve(outputPath);
