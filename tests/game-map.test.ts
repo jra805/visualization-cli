@@ -466,5 +466,22 @@ describe("game-map", () => {
       const hasInnerHtmlAssignment = jsLines.some(line => /\.innerHTML\s*=/.test(line));
       expect(hasInnerHtmlAssignment).toBe(false);
     });
+
+    it("contains arch-pattern element in HTML output", () => {
+      const graph = makeTestGraph();
+      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      expect(html).toContain('id="arch-pattern"');
+      expect(html).toContain("archPatternNames");
+    });
+
+    it("passes architecturePattern in game data", () => {
+      const graph = makeTestGraph();
+      const report = makeReport({ architecturePattern: "mvc" });
+      const html = generateGameMapHtml(graph, report, [], []);
+
+      const match = html.match(/<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/);
+      const data = JSON.parse(match![1]);
+      expect(data.report.architecturePattern).toBe("mvc");
+    });
   });
 });

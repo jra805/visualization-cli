@@ -54,10 +54,16 @@ const RULES: { test: (lower: string, original: string) => boolean; type: ModuleT
   { test: (l) => /config\.java$/.test(l) || /configuration\.java$/.test(l), type: "config" },
   { test: (l) => /application\.java$/.test(l), type: "entry-point" },
 
-  // ── Rust entry points ──
+  // ── Rust entry points & patterns ──
   { test: (l) => /\/src\/main\.rs$/.test(l), type: "entry-point" },
   { test: (l) => /\/src\/lib\.rs$/.test(l), type: "entry-point" },
   { test: (l) => /\/mod\.rs$/.test(l), type: "config" },
+  { test: (l) => (/_handler\.rs$/.test(l) || /\/handlers?\//.test(l)) && l.endsWith(".rs"), type: "handler" },
+  { test: (l) => (/_service\.rs$/.test(l) || /\/services?\//.test(l)) && l.endsWith(".rs"), type: "service" },
+  { test: (l) => (/_model\.rs$/.test(l) || /\/models?\//.test(l)) && l.endsWith(".rs"), type: "model" },
+  { test: (l) => /\/config\//.test(l) && l.endsWith(".rs"), type: "config" },
+  { test: (l) => /\/utils?\//.test(l) && l.endsWith(".rs"), type: "util" },
+  { test: (l) => (/\/db\//.test(l) || /_repo\.rs$/.test(l)) && l.endsWith(".rs"), type: "repository" },
 
   // ── Python patterns ──
   { test: (l) => /views\.py$/.test(l) || /\/views\//.test(l) && l.endsWith(".py"), type: "view" },
@@ -76,6 +82,10 @@ const RULES: { test: (lower: string, original: string) => boolean; type: ModuleT
   { test: (l) => /\/models?\//.test(l) && l.endsWith(".go"), type: "model" },
   { test: (l) => /\/repositor(y|ies)\//.test(l) && l.endsWith(".go") || /\/repo\//.test(l) && l.endsWith(".go"), type: "repository" },
   { test: (l) => /cmd\/.*\/main\.go$/.test(l), type: "entry-point" },
+  { test: (l) => /\/services?\//.test(l) && l.endsWith(".go"), type: "service" },
+  { test: (l) => (/\/config\//.test(l) || /_config\.go$/.test(l)) && l.endsWith(".go"), type: "config" },
+  { test: (l) => (/\/utils?\//.test(l) || /\/pkg\//.test(l)) && l.endsWith(".go"), type: "util" },
+  { test: (l) => /\/store\//.test(l) && l.endsWith(".go"), type: "store" },
 
   // ── C# patterns ──
   { test: (l) => /controller\.cs$/.test(l), type: "controller" },
@@ -86,11 +96,27 @@ const RULES: { test: (lower: string, original: string) => boolean; type: ModuleT
   // ── PHP patterns ──
   { test: (l) => /controller\.php$/.test(l), type: "controller" },
   { test: (l) => /\/app\/models\//.test(l) && l.endsWith(".php"), type: "model" },
+  { test: (l) => /service\.php$/.test(l) || /\/app\/services\//i.test(l) && l.endsWith(".php"), type: "service" },
+  { test: (l) => /repository\.php$/.test(l) || /\/app\/repositories\//i.test(l) && l.endsWith(".php"), type: "repository" },
+  { test: (l) => /middleware\.php$/.test(l) || /\/app\/middleware\//i.test(l) && l.endsWith(".php"), type: "middleware" },
+  { test: (l) => /\/config\//.test(l) && l.endsWith(".php"), type: "config" },
+  { test: (l) => /provider\.php$/.test(l), type: "config" },
+  { test: (l) => /\/database\/migrations\//.test(l) && l.endsWith(".php"), type: "migration" },
+  { test: (l) => /request\.php$/.test(l) || /\/app\/requests\//i.test(l) && l.endsWith(".php"), type: "validator" },
+  { test: (l) => /resource\.php$/.test(l) || /\/app\/resources\//i.test(l) && l.endsWith(".php"), type: "serializer" },
 
   // ── Ruby patterns ──
   { test: (l) => /controller\.rb$/.test(l) || /\/controllers\//.test(l) && l.endsWith(".rb"), type: "controller" },
   { test: (l) => /\/models\//.test(l) && l.endsWith(".rb"), type: "model" },
   { test: (l) => /config\.ru$/.test(l) || /\/bin\/rails/.test(l), type: "entry-point" },
+  { test: (l) => (/_service\.rb$/.test(l) || /\/services?\//.test(l)) && l.endsWith(".rb"), type: "service" },
+  { test: (l) => /\/config\//.test(l) && l.endsWith(".rb"), type: "config" },
+  { test: (l) => /\/lib\//.test(l) && l.endsWith(".rb"), type: "util" },
+  { test: (l) => (/_job\.rb$/.test(l) || /\/jobs?\//.test(l)) && l.endsWith(".rb"), type: "service" },
+  { test: (l) => /\/mailers?\//.test(l) && l.endsWith(".rb"), type: "service" },
+  { test: (l) => /\/serializers?\//.test(l) && l.endsWith(".rb"), type: "serializer" },
+  { test: (l) => /\/middleware\//.test(l) && l.endsWith(".rb"), type: "middleware" },
+  { test: (l) => /\/validators?\//.test(l) && l.endsWith(".rb"), type: "validator" },
 
   // ── Migration files ──
   { test: (l) => /\/migrations?\//.test(l), type: "migration" },

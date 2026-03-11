@@ -40,14 +40,6 @@ export function generateGameMapHtml(
 
   clearPathTerrain(terrain, paths);
 
-  // Build region info for client-side biome rendering
-  const regionBiomes: Record<number, string> = {};
-  for (const loc of locations) {
-    if (!regionBiomes[loc.community]) {
-      regionBiomes[loc.community] = loc.biome;
-    }
-  }
-
   const gameData = {
     locations,
     terrain,
@@ -57,7 +49,6 @@ export function generateGameMapHtml(
     tileSize: 16,
     communityCount: metrics.communityCount,
     maxLayer: metrics.maxLayer,
-    regionBiomes,
     report: {
       totalModules: report.totalModules,
       totalEdges: report.totalEdges,
@@ -67,6 +58,7 @@ export function generateGameMapHtml(
       errorCount: report.issues.filter(i => i.severity === "error").length,
       warningCount: report.issues.filter(i => i.severity === "warning").length,
       infoCount: report.issues.filter(i => i.severity === "info").length,
+      architecturePattern: report.architecturePattern || "unknown",
     },
   };
 

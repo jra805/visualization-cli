@@ -362,6 +362,7 @@ export function generateInteractiveHtml(
     <span class="chip">${data.report.totalEdges} edges</span>
     <span class="chip ${data.report.issues.length > 0 ? 'error' : 'ok'}">${data.report.issues.length} issues</span>
     <span class="chip">${components.length} components</span>
+    ${data.report.architecturePattern && data.report.architecturePattern !== 'unknown' ? `<span class="chip">${data.report.architecturePattern}</span>` : ''}
   </div>
   <input class="search-box" type="text" placeholder="Search modules..." id="search">
 </div>

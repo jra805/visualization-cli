@@ -10,7 +10,7 @@ export interface GameMapData {
   tileSize: number;
   communityCount: number;
   maxLayer: number;
-  regionBiomes: Record<number, string>;
+  regionBiomes?: Record<number, string>;
   report: {
     totalModules: number;
     totalEdges: number;
@@ -489,6 +489,7 @@ canvas#minimap {
     <span class="chip ${gameData.report.errorCount > 0 ? "warn" : "ok"}">${gameData.report.errorCount} attacks</span>
     <span class="chip ${gameData.report.warningCount > 0 ? "warn" : "ok"}">${gameData.report.warningCount} deteriorating</span>
     <span class="chip">${gameData.report.infoCount} neglected</span>
+    <span class="chip" id="arch-pattern"></span>
   </div>
 </div>
 
@@ -561,7 +562,21 @@ canvas#minimap {
   var GRID_W = raw.gridWidth || 20;
   var GRID_H = raw.gridHeight || 20;
   var TILE = raw.tileSize || 16;
-  var regionBiomes = raw.regionBiomes || {};
+
+  // Architecture pattern chip
+  var archPatternNames = {
+    layered: "Layered Kingdoms",
+    mvc: "MVC Triumvirate",
+    hexagonal: "Hexagonal Fortress",
+    modular: "Modular Territories"
+  };
+  var archEl = document.getElementById("arch-pattern");
+  var archPat = raw.report && raw.report.architecturePattern;
+  if (archEl && archPat && archPatternNames[archPat]) {
+    archEl.textContent = archPatternNames[archPat];
+  } else if (archEl) {
+    archEl.style.display = "none";
+  }
 
   if (locations.length === 0) {
     document.body.textContent = "No modules found in the project.";
@@ -570,19 +585,6 @@ canvas#minimap {
 
   // === PALETTE ===
   var GRASS = ["#4a8c3f", "#529446", "#459038", "#4e9240"];
-
-  // Biome-specific ground colors
-  var BIOME_GROUND = {
-    forest:   { base: "#2e5a2a", accent: "#1e4d2b" },
-    coastal:  { base: "#c4b890", accent: "#a0c4d0" },
-    mountain: { base: "#7a7060", accent: "#6a6050" },
-    plains:   { base: "#5a9c4a", accent: "#6aac5a" },
-    desert:   { base: "#c4a040", accent: "#d4b060" },
-    swamp:    { base: "#3a5030", accent: "#4a6040" },
-    volcanic: { base: "#4a3030", accent: "#6a3020" },
-    crystal:  { base: "#6088a0", accent: "#88aacc" },
-    castle:   { base: "#8a7a60", accent: "#aa9470" }
-  };
 
   var ROAD_COLOR =    { main: "#c4a265", glow: "#d4b275" };  // local (same region)
   var HIGHWAY_COLOR = { main: "#d4a017", glow: "#e4b027" };  // cross-region
@@ -1536,14 +1538,6 @@ canvas#minimap {
     ctx.translate(px, py);
     ctx.scale(scale, scale);
 
-    // Dark ground pad for contrast against grass terrain
-    var padSize = loc.tileSize * TILE;
-    var padMargin = 2;
-    ctx.fillStyle = "rgba(15, 12, 8, 0.55)";
-    ctx.fillRect(-padMargin, -padMargin, padSize + padMargin * 2, padSize + padMargin * 2);
-    ctx.fillStyle = "rgba(30, 25, 18, 0.35)";
-    ctx.fillRect(-padMargin - 1, -padMargin - 1, padSize + padMargin * 2 + 2, padSize + padMargin * 2 + 2);
-
     // Orphan: ghostly transparency
     if (loc.isOrphan) ctx.globalAlpha = 0.45;
 
@@ -1860,13 +1854,20 @@ canvas#minimap {
     while (el.firstChild) el.removeChild(el.firstChild);
 
     if (currentLens === "kingdom") {
-      var biomes = [
-        ["#2e6d3b","Forest (UI)"], ["#3b6ba5","Coastal (API)"], ["#8b7d6b","Mountain (Data)"],
-        ["#4a8c3f","Plains (Utils)"], ["#c4a040","Desert (Types)"], ["#4a6040","Swamp (Tests)"],
-        ["#cc4422","Volcanic (Circular)"], ["#88aacc","Crystal (Infra)"], ["#aa8844","Castle (Services)"]
+      var cats = [
+        ["#4A7AE8","UI (component, page, view)"],
+        ["#E88030","API (controller, handler, route)"],
+        ["#A07050","Data (model, entity, repo)"],
+        ["#4890E0","Services (service)"],
+        ["#E04848","State (store)"],
+        ["#30B868","Hooks (hook, composable)"],
+        ["#3898C0","Config (config, schema)"],
+        ["#8088C0","Types (type, util)"],
+        ["#606878","Tests (test)"],
+        ["#E8B020","Entry Points"]
       ];
-      var bSec = lgSec(el, "Biomes");
-      for (var bi = 0; bi < biomes.length; bi++) lgDot(bSec, biomes[bi][0], biomes[bi][1]);
+      var bSec = lgSec(el, "Building Types");
+      for (var bi = 0; bi < cats.length; bi++) lgDot(bSec, cats[bi][0], cats[bi][1]);
       var rSec = lgSec(el, "Routes");
       lgLine(rSec, "#c4a265", "Local Road");
       lgLine(rSec, "#d4a017", "Highway");
@@ -2072,7 +2073,7 @@ canvas#minimap {
     panel.appendChild(title);
 
     addField(panel, "Location Type", loc.locationType + " (" + loc.moduleType + ")");
-    addField(panel, "Biome", loc.biome || "unknown");
+    addField(panel, "Type", loc.moduleType || "unknown");
     addField(panel, "Community", "Region " + loc.community);
     addField(panel, "Layer", "Depth " + loc.layer);
     addField(panel, "Region", loc.directory);
@@ -2290,7 +2291,7 @@ canvas#minimap {
 
     if (loc && loc !== hoveredLoc) {
       hoveredLoc = loc;
-      var tipText = loc.label + " | " + loc.locationName + " | " + loc.biome + " | " + loc.loc + "L | In:" + loc.fanIn + " Out:" + loc.fanOut;
+      var tipText = loc.label + " | " + loc.locationName + " | " + loc.moduleType + " | " + loc.loc + "L | In:" + loc.fanIn + " Out:" + loc.fanOut;
       if (loc.threats && loc.threats.length > 0) {
         tipText += " | " + loc.condition.toUpperCase();
       }

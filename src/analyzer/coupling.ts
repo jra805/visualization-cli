@@ -8,6 +8,29 @@ export interface CouplingScore {
   fanOut: number;
 }
 
+interface CouplingThresholds {
+  godModuleFanOut: number;
+  godModuleLoc: number;
+  highCouplingFanIn: number;
+  highCouplingFanOut: number;
+}
+
+const LANGUAGE_THRESHOLDS: Record<string, CouplingThresholds> = {
+  java:       { godModuleFanOut: 30, godModuleLoc: 1500, highCouplingFanIn: 15, highCouplingFanOut: 15 },
+  kotlin:     { godModuleFanOut: 30, godModuleLoc: 1500, highCouplingFanIn: 15, highCouplingFanOut: 15 },
+  csharp:     { godModuleFanOut: 30, godModuleLoc: 1500, highCouplingFanIn: 15, highCouplingFanOut: 15 },
+  python:     { godModuleFanOut: 15, godModuleLoc: 800,  highCouplingFanIn: 8,  highCouplingFanOut: 8  },
+  ruby:       { godModuleFanOut: 15, godModuleLoc: 800,  highCouplingFanIn: 8,  highCouplingFanOut: 8  },
+  go:         { godModuleFanOut: 15, godModuleLoc: 800,  highCouplingFanIn: 10, highCouplingFanOut: 10 },
+  default:    { godModuleFanOut: 20, godModuleLoc: 1000, highCouplingFanIn: 10, highCouplingFanOut: 10 },
+};
+
+// Module types exempt from god-module fan-out check (barrel files, bootstraps)
+const FANOUT_EXEMPT_TYPES = new Set(["entry-point", "config"]);
+
+// Module types that get relaxed fan-out thresholds (orchestrators)
+const ORCHESTRATOR_TYPES = new Set(["controller", "handler"]);
+
 export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues: Issue[] } {
   const scores: CouplingScore[] = [];
   const issues: Issue[] = [];
@@ -19,27 +42,37 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
     const fo = fanOut(graph, id);
     scores.push({ file: id, fanIn: fi, fanOut: fo });
 
-    // God module: extremely high fan-out or very large
-    if (fo > 20) {
-      issues.push({
-        type: "god-module",
-        severity: "warning",
-        message: `High fan-out (${fo} dependencies): ${id}`,
-        files: [id],
-      });
+    const lang = node.language ?? "default";
+    const thresholds = LANGUAGE_THRESHOLDS[lang] ?? LANGUAGE_THRESHOLDS.default;
+
+    // God module: collect all triggered reasons into a single issue
+    const godReasons: string[] = [];
+
+    if (!FANOUT_EXEMPT_TYPES.has(node.moduleType)) {
+      let fanOutThreshold = thresholds.godModuleFanOut;
+      if (ORCHESTRATOR_TYPES.has(node.moduleType)) {
+        fanOutThreshold = Math.ceil(fanOutThreshold * 1.5);
+      }
+      if (fo > fanOutThreshold) {
+        godReasons.push(`fan-out ${fo} (threshold ${fanOutThreshold})`);
+      }
     }
 
-    if (node.loc > 1000) {
+    if (node.loc > thresholds.godModuleLoc) {
+      godReasons.push(`${node.loc} LOC (threshold ${thresholds.godModuleLoc})`);
+    }
+
+    if (godReasons.length > 0) {
       issues.push({
         type: "god-module",
         severity: "warning",
-        message: `Very large module (${node.loc} LOC): ${id}`,
+        message: `God module — ${godReasons.join(" AND ")}: ${id}`,
         files: [id],
       });
     }
 
     // High coupling: both high fan-in and fan-out
-    if (fi > 10 && fo > 10) {
+    if (fi > thresholds.highCouplingFanIn && fo > thresholds.highCouplingFanOut) {
       issues.push({
         type: "high-coupling",
         severity: "warning",

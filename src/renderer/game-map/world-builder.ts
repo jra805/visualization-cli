@@ -1,4 +1,4 @@
-import type { GameLocation, BiomeType } from "./node-mapper.js";
+import type { GameLocation } from "./node-mapper.js";
 import type { SerializedEdge } from "../serialize.js";
 
 // Terrain type indices — expanded for biome-specific terrain
@@ -91,24 +91,11 @@ function fbm(x: number, y: number, octaves: number, baseScale: number, seed: num
   return value / totalAmp;
 }
 
-// Map biome to its primary terrain types
-const BIOME_TERRAIN: Record<BiomeType, { primary: number; secondary: number; accent: number }> = {
-  forest:   { primary: TERRAIN.DARK_GRASS, secondary: TERRAIN.FOREST,       accent: TERRAIN.GRASS2 },
-  coastal:  { primary: TERRAIN.COAST_SAND, secondary: TERRAIN.WATER,        accent: TERRAIN.GRASS1 },
-  mountain: { primary: TERRAIN.MOUNTAIN,   secondary: TERRAIN.SNOW,         accent: TERRAIN.GRASS3 },
-  plains:   { primary: TERRAIN.GRASS1,     secondary: TERRAIN.FLOWER,       accent: TERRAIN.GRASS4 },
-  desert:   { primary: TERRAIN.SAND,       secondary: TERRAIN.SAND,         accent: TERRAIN.MOUNTAIN },
-  swamp:    { primary: TERRAIN.SWAMP,      secondary: TERRAIN.WATER,        accent: TERRAIN.DARK_GRASS },
-  volcanic: { primary: TERRAIN.LAVA,       secondary: TERRAIN.MOUNTAIN,     accent: TERRAIN.SAND },
-  crystal:  { primary: TERRAIN.CRYSTAL,    secondary: TERRAIN.SNOW,         accent: TERRAIN.GRASS2 },
-  castle:   { primary: TERRAIN.CASTLE_FLOOR, secondary: TERRAIN.MOUNTAIN,   accent: TERRAIN.GRASS1 },
-};
-
 export function generateTerrain(
   width: number,
   height: number,
   locations: GameLocation[],
-  regions?: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>
+  _regions?: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>
 ): number[][] {
   const terrain: number[][] = [];
   const seed = locations.length * 7 + width * 13;
@@ -118,45 +105,6 @@ export function generateTerrain(
   const elevationScale = Math.max(width, height) * 0.35;
   const moistureScale = Math.max(width, height) * 0.3;
   const detailScale = Math.max(width, height) * 0.12;
-
-  // Build set of protected tiles near locations (tight: directly under building)
-  // and transition tiles (1 tile buffer around building for softer blending)
-  const protected_ = new Set<string>();
-  const transition_ = new Set<string>();
-  for (const loc of locations) {
-    for (let dy = 0; dy < loc.tileSize; dy++) {
-      for (let dx = 0; dx < loc.tileSize; dx++) {
-        protected_.add(`${loc.gridX + dx},${loc.gridY + dy}`);
-      }
-    }
-    for (let dy = -1; dy <= loc.tileSize; dy++) {
-      for (let dx = -1; dx <= loc.tileSize; dx++) {
-        const key = `${loc.gridX + dx},${loc.gridY + dy}`;
-        if (!protected_.has(key)) {
-          transition_.add(key);
-        }
-      }
-    }
-  }
-
-  // Build biome map: community → biome type
-  const communityBiome = new Map<number, BiomeType>();
-  for (const loc of locations) {
-    if (!communityBiome.has(loc.community)) {
-      communityBiome.set(loc.community, loc.biome);
-    }
-  }
-
-  // Determine which region each tile belongs to
-  function getRegionBiome(x: number, y: number): BiomeType | null {
-    if (!regions) return null;
-    for (const [communityId, bounds] of regions) {
-      if (x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY) {
-        return communityBiome.get(communityId) ?? null;
-      }
-    }
-    return null;
-  }
 
   // Precompute noise fields using coherent noise
   const elevation: number[][] = [];
@@ -181,7 +129,7 @@ export function generateTerrain(
     return Math.min(1, Math.min(ex, ey));
   }
 
-  // Initialize terrain
+  // All tiles use natural procedural terrain — no biome-specific painting
   for (let y = 0; y < height; y++) {
     terrain[y] = [];
     for (let x = 0; x < width; x++) {
@@ -189,113 +137,53 @@ export function generateTerrain(
       const moist = moisture[y][x];
       const det = detail[y][x];
       const edge = edgeFalloff(x, y);
-      const isProtected = protected_.has(`${x},${y}`);
-      const isTransition = transition_.has(`${x},${y}`);
-      const biome = getRegionBiome(x, y);
 
       // Combine elevation with edge falloff for natural coastline
-      // Lower elevation near edges creates water/beach borders
       const effectiveElev = elev * (0.3 + 0.7 * edge);
 
-      if (isProtected) {
-        // Directly under buildings: use biome-appropriate ground (not just grass)
-        if (biome) {
-          const bt = BIOME_TERRAIN[biome];
-          // Mix primary and accent for subtle variation
-          terrain[y][x] = det > 0.6 ? bt.accent : bt.primary;
+      // Natural terrain based on elevation + moisture
+      if (effectiveElev < 0.22) {
+        // Deep water (low elevation near edges or in basins)
+        terrain[y][x] = TERRAIN.WATER;
+      } else if (effectiveElev < 0.28) {
+        // Shoreline: beach sand transitioning from water
+        terrain[y][x] = det > 0.5 ? TERRAIN.COAST_SAND : TERRAIN.WATER;
+      } else if (effectiveElev > 0.72) {
+        // High peaks: snow-capped mountains
+        terrain[y][x] = det > 0.6 ? TERRAIN.SNOW : TERRAIN.MOUNTAIN;
+      } else if (effectiveElev > 0.62) {
+        // Mountain foothills
+        terrain[y][x] = det > 0.55 ? TERRAIN.MOUNTAIN : TERRAIN.GRASS3;
+      } else if (moist > 0.62 && effectiveElev < 0.45) {
+        // Wet lowlands: lakes and ponds
+        if (moist > 0.72) {
+          terrain[y][x] = TERRAIN.WATER;
         } else {
-          terrain[y][x] = Math.floor(det * 3.99);
+          terrain[y][x] = det > 0.5 ? TERRAIN.SWAMP : TERRAIN.DARK_GRASS;
         }
-      } else if (isTransition) {
-        // 1-tile buffer: blend between biome ground and surrounding terrain
-        if (biome) {
-          const bt = BIOME_TERRAIN[biome];
-          if (det > 0.7) {
-            terrain[y][x] = bt.secondary;
-          } else if (det > 0.4) {
-            terrain[y][x] = bt.primary;
-          } else {
-            terrain[y][x] = bt.accent;
-          }
+      } else if (moist > 0.55) {
+        // Moist areas: dense forest
+        terrain[y][x] = det > 0.5 ? TERRAIN.FOREST : TERRAIN.DARK_GRASS;
+      } else if (moist < 0.35 && effectiveElev > 0.45) {
+        // Dry highlands: sandy with sparse vegetation
+        terrain[y][x] = det > 0.6 ? TERRAIN.SAND : TERRAIN.GRASS4;
+      } else if (moist > 0.42) {
+        // Moderate moisture: mixed forest and meadows
+        if (det > 0.65) {
+          terrain[y][x] = TERRAIN.FOREST;
+        } else if (det > 0.45) {
+          terrain[y][x] = TERRAIN.FLOWER;
         } else {
-          terrain[y][x] = Math.floor(det * 3.99);
-        }
-      } else if (biome) {
-        // Inside a biome region: themed terrain with coherent patterns
-        const bt = BIOME_TERRAIN[biome];
-        if (det > 0.7) {
-          terrain[y][x] = bt.secondary;
-        } else if (det > 0.35) {
-          terrain[y][x] = bt.primary;
-        } else if (det > 0.2) {
-          terrain[y][x] = bt.accent;
-        } else {
-          terrain[y][x] = bt.primary;
+          terrain[y][x] = Math.floor(det * 3.99); // grass variants
         }
       } else {
-        // Wilderness: natural terrain based on elevation + moisture
-        if (effectiveElev < 0.22) {
-          // Deep water (low elevation near edges or in basins)
-          terrain[y][x] = TERRAIN.WATER;
-        } else if (effectiveElev < 0.28) {
-          // Shoreline: beach sand transitioning from water
-          terrain[y][x] = det > 0.5 ? TERRAIN.COAST_SAND : TERRAIN.WATER;
-        } else if (effectiveElev > 0.72) {
-          // High peaks: snow-capped mountains
-          terrain[y][x] = det > 0.6 ? TERRAIN.SNOW : TERRAIN.MOUNTAIN;
-        } else if (effectiveElev > 0.62) {
-          // Mountain foothills
-          terrain[y][x] = det > 0.55 ? TERRAIN.MOUNTAIN : TERRAIN.GRASS3;
-        } else if (moist > 0.62 && effectiveElev < 0.45) {
-          // Wet lowlands: lakes and ponds
-          if (moist > 0.72) {
-            terrain[y][x] = TERRAIN.WATER;
-          } else {
-            terrain[y][x] = det > 0.5 ? TERRAIN.SWAMP : TERRAIN.DARK_GRASS;
-          }
-        } else if (moist > 0.55) {
-          // Moist areas: dense forest
-          terrain[y][x] = det > 0.5 ? TERRAIN.FOREST : TERRAIN.DARK_GRASS;
-        } else if (moist < 0.35 && effectiveElev > 0.45) {
-          // Dry highlands: sandy with sparse vegetation
-          terrain[y][x] = det > 0.6 ? TERRAIN.SAND : TERRAIN.GRASS4;
-        } else if (moist > 0.42) {
-          // Moderate moisture: mixed forest and meadows
-          if (det > 0.65) {
-            terrain[y][x] = TERRAIN.FOREST;
-          } else if (det > 0.45) {
-            terrain[y][x] = TERRAIN.FLOWER;
-          } else {
-            terrain[y][x] = Math.floor(det * 3.99); // grass variants
-          }
+        // Default: open grassland with occasional features
+        if (det > 0.72) {
+          terrain[y][x] = TERRAIN.FOREST;
+        } else if (det > 0.6) {
+          terrain[y][x] = rng() > 0.6 ? TERRAIN.FLOWER : TERRAIN.GRASS2;
         } else {
-          // Default: open grassland with occasional features
-          if (det > 0.72) {
-            terrain[y][x] = TERRAIN.FOREST;
-          } else if (det > 0.6) {
-            terrain[y][x] = rng() > 0.6 ? TERRAIN.FLOWER : TERRAIN.GRASS2;
-          } else {
-            terrain[y][x] = Math.floor(det * 3.99); // grass variants
-          }
-        }
-      }
-    }
-  }
-
-  // Paint rivers between different biome regions
-  if (regions && regions.size > 1) {
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        if (protected_.has(`${x},${y}`)) continue;
-        const b1 = getRegionBiome(x, y);
-        const b2 = getRegionBiome(x + 1, y);
-        const b3 = getRegionBiome(x, y + 1);
-        if ((b1 && b2 && b1 !== b2) || (b1 && b3 && b1 !== b3)) {
-          // Use coherent noise for river width variation
-          const riverNoise = detail[y][x];
-          if (riverNoise > 0.25) {
-            terrain[y][x] = TERRAIN.WATER;
-          }
+          terrain[y][x] = Math.floor(det * 3.99); // grass variants
         }
       }
     }

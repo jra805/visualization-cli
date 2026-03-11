@@ -81,6 +81,10 @@ export async function analyzeCommand(
     `Analysis complete: ${report.issues.length} issues found`
   );
 
+  if (report.architecturePattern && report.architecturePattern !== "unknown") {
+    console.log(chalk.dim(`  Architecture: ${report.architecturePattern}`));
+  }
+
   // Step 3.5: Optional grouping
   const groupedGraph = applyGrouping(parseResult.graph, {
     group: options.group,

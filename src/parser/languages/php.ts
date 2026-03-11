@@ -4,6 +4,7 @@ import type { LanguageParser, ParsedDependencies } from "../language-parser.js";
 import type { GraphNode, Edge } from "../../graph/types.js";
 import { classifyModule } from "../module-classifier.js";
 import { getModuleName } from "../../utils/paths.js";
+import { findCircularDeps } from "../../analyzer/circular.js";
 
 export class PhpParser implements LanguageParser {
   language = "php" as const;
@@ -52,7 +53,7 @@ export class PhpParser implements LanguageParser {
       }
     }
 
-    return { nodes, edges, circularDeps: [] };
+    return { nodes, edges, circularDeps: findCircularDeps(nodes, edges) };
   }
 }
 

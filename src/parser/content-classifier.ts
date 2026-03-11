@@ -43,6 +43,25 @@ const CONTENT_RULES: ContentRule[] = [
   { pattern: /@RequestMapping\b|@GetMapping\b|@PostMapping\b/, type: "controller" },
   { pattern: /@Configuration\b/, type: "config" },
 
+  // Rust
+  { pattern: /async fn handle/, type: "handler" },
+
+  // PHP Laravel
+  { pattern: /extends Controller/, type: "controller" },
+  { pattern: /extends Model/, type: "model" },
+  { pattern: /extends Middleware/, type: "middleware" },
+  { pattern: /extends FormRequest/, type: "validator" },
+
+  // Ruby Rails
+  { pattern: /class \w+ < ApplicationController/, type: "controller" },
+  { pattern: /class \w+ < ApplicationRecord/, type: "model" },
+  { pattern: /class \w+ < ActiveJob::Base/, type: "service" },
+  { pattern: /class \w+ < ApplicationMailer/, type: "service" },
+
+  // ASP.NET
+  { pattern: /\[ApiController\]/, type: "controller" },
+  { pattern: /\[HttpGet\]|\[HttpPost\]/, type: "controller" },
+
   // General patterns
   { pattern: /class\s+\w+.*Migration\b/, type: "migration" },
   { pattern: /class\s+\w+.*Test\b|describe\s*\(|it\s*\(|test\s*\(/, type: "test" },
@@ -57,7 +76,7 @@ export function classifyByContent(graph: Graph, rootDir: string): void {
     if (node.moduleType !== "unknown") continue;
 
     const absPath = path.join(rootDir, node.filePath);
-    const head = readHead(absPath, 50);
+    const head = readHead(absPath, 150);
     if (!head) continue;
 
     for (const rule of CONTENT_RULES) {
