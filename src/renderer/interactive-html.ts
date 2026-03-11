@@ -114,10 +114,8 @@ export function generateInteractiveHtml(
   }
 
   #cy {
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    position: relative;
+    width: 100%;
+    height: 100%;
   }
 
   #cy-error {
@@ -238,6 +236,121 @@ export function generateInteractiveHtml(
   }
   .lens-btn:hover { color: #c9d1d9; }
   .lens-btn.active { color: #d2a8ff; border-bottom-color: #d2a8ff; }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 20px;
+    border-bottom: 1px solid #21262d;
+    flex-shrink: 0;
+    background: #0d1117;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 2px;
+  }
+
+  .toolbar-label {
+    font-size: 10px;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+    padding-left: 4px;
+  }
+
+  .tb-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: #8b949e;
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .tb-btn:hover { background: #21262d; color: #c9d1d9; }
+  .tb-btn.active { background: #21262d; color: #58a6ff; }
+  .tb-btn svg { vertical-align: middle; }
+
+  .toolbar-sep {
+    width: 1px;
+    height: 20px;
+    background: #30363d;
+    margin: 0 4px;
+  }
+
+  .minimap {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    width: 180px;
+    height: 120px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    overflow: hidden;
+    z-index: 20;
+    opacity: 0.85;
+  }
+  .minimap:hover { opacity: 1; }
+  .minimap canvas { width: 100%; height: 100%; }
+
+  .minimap-viewport {
+    position: absolute;
+    border: 1.5px solid #58a6ff;
+    background: rgba(88, 166, 255, 0.08);
+    pointer-events: none;
+  }
+
+  .zoom-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 20;
+  }
+
+  .zoom-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    color: #c9d1d9;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .zoom-btn:hover { background: #21262d; border-color: #58a6ff; }
+
+  .node-count-badge {
+    font-size: 10px;
+    color: #6B7280;
+    padding: 0 6px;
+  }
+
+  #cy-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  #cy { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 </style>
 </head>
 <body>
@@ -267,8 +380,35 @@ export function generateInteractiveHtml(
   <button class="lens-btn" data-lens="languages">Languages</button>
 </div>
 
+<div class="toolbar">
+  <span class="toolbar-label">Layout</span>
+  <div class="toolbar-group">
+    <button class="tb-btn" data-layout="dagre-lr" title="Left to Right">LR</button>
+    <button class="tb-btn" data-layout="dagre-tb" title="Top to Bottom">TB</button>
+    <button class="tb-btn" data-layout="cose" title="Force-Directed">Force</button>
+    <button class="tb-btn" data-layout="circle" title="Circle">Circle</button>
+    <button class="tb-btn" data-layout="concentric" title="Concentric (by connections)">Radial</button>
+  </div>
+  <div class="toolbar-sep"></div>
+  <span class="toolbar-label">Filter</span>
+  <div class="toolbar-group" id="type-filters"></div>
+  <div class="toolbar-sep"></div>
+  <span class="node-count-badge" id="node-count"></span>
+</div>
+
 <div class="main">
-  <div id="cy"></div>
+  <div id="cy-wrapper">
+    <div id="cy"></div>
+    <div class="minimap" id="minimap">
+      <canvas id="minimap-canvas"></canvas>
+      <div class="minimap-viewport" id="minimap-vp"></div>
+    </div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoom-fit" title="Fit all">&#8862;</button>
+      <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+      <button class="zoom-btn" id="zoom-out" title="Zoom out">&minus;</button>
+    </div>
+  </div>
   <div class="inspector" id="inspector">
     <h2>INSPECTOR</h2>
     <p class="empty">Click a node to inspect</p>
@@ -456,34 +596,96 @@ export function generateInteractiveHtml(
     wheelSensitivity: 0.3
   });
 
-  // Layout helper: dagre if available, otherwise cose (built-in force-directed)
-  // Parameters scale with visible node count for readable layouts at any size.
-  function runLayout(overrides) {
+  // --- DOM refs (grab all up front before any logic) ---
+  var minimapCanvas = document.getElementById('minimap-canvas');
+  var minimapCtx = minimapCanvas.getContext('2d');
+  var minimapVp = document.getElementById('minimap-vp');
+  var minimapEl = document.getElementById('minimap');
+  var nodeCountEl = document.getElementById('node-count');
+  var layoutBtns = document.querySelectorAll('[data-layout]');
+  var filterEl = document.getElementById('type-filters');
+
+  // --- Minimap ---
+  function updateMinimap() {
+    if (!cy || cy.nodes(':visible').length === 0) return;
+    var w = minimapEl.offsetWidth;
+    var h = minimapEl.offsetHeight;
+    minimapCanvas.width = w;
+    minimapCanvas.height = h;
+    minimapCtx.clearRect(0, 0, w, h);
+
+    var bb = cy.elements(':visible').boundingBox();
+    if (bb.w === 0 || bb.h === 0) return;
+    var pad = 10;
+    var scaleX = (w - pad * 2) / bb.w;
+    var scaleY = (h - pad * 2) / bb.h;
+    var scale = Math.min(scaleX, scaleY);
+
+    minimapCtx.strokeStyle = 'rgba(107, 114, 128, 0.15)';
+    minimapCtx.lineWidth = 0.5;
+    cy.edges(':visible').forEach(function(e) {
+      var sp = e.source().position();
+      var tp = e.target().position();
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(pad + (sp.x - bb.x1) * scale, pad + (sp.y - bb.y1) * scale);
+      minimapCtx.lineTo(pad + (tp.x - bb.x1) * scale, pad + (tp.y - bb.y1) * scale);
+      minimapCtx.stroke();
+    });
+
+    cy.nodes(':visible').forEach(function(n) {
+      if (n.hasClass('compound-group')) return;
+      var pos = n.position();
+      var x = pad + (pos.x - bb.x1) * scale;
+      var y = pad + (pos.y - bb.y1) * scale;
+      minimapCtx.fillStyle = n.style('background-color');
+      minimapCtx.fillRect(x - 1.5, y - 1.5, 3, 3);
+    });
+
+    var ext = cy.extent();
+    var vx = pad + (ext.x1 - bb.x1) * scale;
+    var vy = pad + (ext.y1 - bb.y1) * scale;
+    var vw = (ext.x2 - ext.x1) * scale;
+    var vh = (ext.y2 - ext.y1) * scale;
+    minimapVp.style.left = Math.max(0, vx) + 'px';
+    minimapVp.style.top = Math.max(0, vy) + 'px';
+    minimapVp.style.width = Math.min(w, vw) + 'px';
+    minimapVp.style.height = Math.min(h, vh) + 'px';
+  }
+
+  function updateNodeCount() {
+    var vis = cy.nodes(':visible').length;
+    var total = cy.nodes().length;
+    nodeCountEl.textContent = vis === total ? total + ' nodes' : vis + ' / ' + total + ' nodes';
+  }
+
+  // --- Layout engine ---
+  var currentLayoutName = 'dagre-lr';
+
+  function buildLayoutOpts(layoutName) {
     var visibleNodes = cy.nodes(':visible').length || 1;
     var opts;
-    if (hasDagre) {
-      // Scale spacing so larger graphs spread out more
-      var nodeSep = Math.max(60, Math.min(120, 40 + visibleNodes));
-      var rankSep = Math.max(100, Math.min(200, 60 + visibleNodes * 1.5));
+
+    if (layoutName === 'dagre-lr' || layoutName === 'dagre-tb') {
+      if (!hasDagre) return buildLayoutOpts('cose');
+      var nodeSep = Math.max(40, Math.min(80, 30 + visibleNodes * 0.2));
+      var rankSep = Math.max(80, Math.min(160, 50 + visibleNodes * 0.5));
       opts = {
         name: 'dagre',
-        rankDir: 'LR',
+        rankDir: layoutName === 'dagre-tb' ? 'TB' : 'LR',
         nodeSep: nodeSep,
         rankSep: rankSep,
         fit: true,
-        padding: 40,
+        padding: 30,
         animate: false
       };
-    } else {
-      // Scale repulsion & edge length for larger graphs
+    } else if (layoutName === 'cose') {
       var repulsion = Math.max(8000, 4000 + visibleNodes * 200);
       var edgeLen = Math.max(100, 60 + visibleNodes * 2);
-      // Lower gravity for larger graphs so clusters spread apart
-      var grav = Math.max(0.05, 0.3 - visibleNodes * 0.003);
+      var grav = Math.max(0.1, 0.5 - visibleNodes * 0.003);
       opts = {
         name: 'cose',
         fit: true,
-        padding: 40,
+        padding: 30,
         nodeRepulsion: function() { return repulsion; },
         idealEdgeLength: function() { return edgeLen; },
         edgeElasticity: function() { return 100; },
@@ -491,23 +693,118 @@ export function generateInteractiveHtml(
         numIter: Math.max(1000, 500 + visibleNodes * 20),
         animate: false
       };
+    } else if (layoutName === 'circle') {
+      opts = { name: 'circle', fit: true, padding: 30, animate: false, avoidOverlap: true };
+    } else if (layoutName === 'concentric') {
+      opts = {
+        name: 'concentric', fit: true, padding: 30, animate: false,
+        minNodeSpacing: 20,
+        concentric: function(node) { return node.degree(); },
+        levelWidth: function() { return 2; }
+      };
+    } else {
+      return buildLayoutOpts('dagre-lr');
     }
-    // Apply overrides (for tab switching rankDir, animate, etc.)
-    if (overrides) {
-      for (var key in overrides) {
-        opts[key] = overrides[key];
-      }
-    }
+    return opts;
+  }
+
+  function runLayout(layoutNameOverride) {
+    var name = layoutNameOverride || currentLayoutName;
+    var opts = buildLayoutOpts(name);
     try {
       cy.layout(opts).run();
     } catch(e) {
       console.error('Layout failed, falling back to grid:', e);
       cy.layout({ name: 'grid', fit: true, padding: 30 }).run();
     }
+    updateMinimap();
+    updateNodeCount();
   }
 
-  // Initial layout
+  // Initial layout — always dagre-lr, it handles large graphs fine
   runLayout();
+
+  // --- Layout toolbar ---
+  function setActiveLayoutBtn(name) {
+    layoutBtns.forEach(function(b) { b.classList.toggle('active', b.dataset.layout === name); });
+  }
+  setActiveLayoutBtn(currentLayoutName);
+
+  layoutBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      currentLayoutName = btn.dataset.layout;
+      setActiveLayoutBtn(currentLayoutName);
+      runLayout();
+    });
+  });
+
+  // --- Zoom controls ---
+  document.getElementById('zoom-fit').addEventListener('click', function() {
+    cy.fit(cy.elements(':visible'), 30);
+    updateMinimap();
+  });
+  document.getElementById('zoom-in').addEventListener('click', function() {
+    cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+    updateMinimap();
+  });
+  document.getElementById('zoom-out').addEventListener('click', function() {
+    cy.zoom({ level: cy.zoom() / 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+    updateMinimap();
+  });
+
+  // --- Type filter chips ---
+  (function() {
+    var types = {};
+    cy.nodes().forEach(function(n) {
+      var mt = n.data('moduleType');
+      if (mt && !n.hasClass('compound-group')) { types[mt] = (types[mt] || 0) + 1; }
+    });
+    var hiddenTypes = {};
+    var sorted = Object.keys(types).sort(function(a, b) { return types[b] - types[a]; });
+    var shown = sorted.slice(0, 8);
+    shown.forEach(function(mt) {
+      var btn = document.createElement('button');
+      btn.className = 'tb-btn active';
+      btn.textContent = mt + ' (' + types[mt] + ')';
+      btn.title = 'Toggle ' + mt + ' modules';
+      btn.addEventListener('click', function() {
+        if (hiddenTypes[mt]) {
+          delete hiddenTypes[mt];
+          btn.classList.add('active');
+        } else {
+          hiddenTypes[mt] = true;
+          btn.classList.remove('active');
+        }
+        cy.nodes().forEach(function(n) {
+          if (n.hasClass('compound-group')) return;
+          if (hiddenTypes[n.data('moduleType')]) { n.hide(); } else { n.show(); }
+        });
+        updateNodeCount();
+        updateMinimap();
+      });
+      filterEl.appendChild(btn);
+    });
+  })();
+
+  // --- Minimap events ---
+  cy.on('viewport', updateMinimap);
+  cy.on('position', updateMinimap);
+  setTimeout(updateMinimap, 200);
+
+  minimapEl.addEventListener('click', function(evt) {
+    var rect = minimapEl.getBoundingClientRect();
+    var mx = evt.clientX - rect.left;
+    var my = evt.clientY - rect.top;
+    var bb = cy.elements(':visible').boundingBox();
+    if (bb.w === 0 || bb.h === 0) return;
+    var pad = 10;
+    var scaleX = (minimapEl.offsetWidth - pad * 2) / bb.w;
+    var scaleY = (minimapEl.offsetHeight - pad * 2) / bb.h;
+    var scale = Math.min(scaleX, scaleY);
+    var worldX = bb.x1 + (mx - pad) / scale;
+    var worldY = bb.y1 + (my - pad) / scale;
+    cy.center({ x: worldX, y: worldY });
+  });
 
   // --- Tab switching ---
   var currentView = 'dependency';
@@ -521,7 +818,7 @@ export function generateInteractiveHtml(
     cy.elements().show();
 
     if (view === 'dependency') {
-      runLayout({ rankDir: 'LR', animate: true, animationDuration: 300 });
+      runLayout();
     } else if (view === 'component') {
       var rendersEdges = cy.edges('[type="renders"]');
       cy.edges('[type="import"]').hide();
@@ -533,7 +830,7 @@ export function generateInteractiveHtml(
           n.hide();
         }
       });
-      runLayout({ rankDir: 'TB', animate: true, animationDuration: 300 });
+      runLayout();
     } else if (view === 'dataflow') {
       var dfEdges = cy.edges('[type="data-flow"]');
       cy.edges('[type="import"]').hide();
@@ -544,7 +841,7 @@ export function generateInteractiveHtml(
           n.hide();
         }
       });
-      runLayout({ rankDir: 'LR', animate: true, animationDuration: 300 });
+      runLayout();
     } else if (view === 'issues') {
       cy.nodes().forEach(function(n) {
         if (!n.data('isCircular') && !n.data('isOrphan') && !n.data('isGodModule') && !n.data('isHotspot')) {
@@ -554,7 +851,7 @@ export function generateInteractiveHtml(
       cy.edges().forEach(function(e) {
         if (!e.data('isCircular')) e.hide();
       });
-      runLayout({ rankDir: 'LR', animate: true, animationDuration: 300 });
+      runLayout();
     }
   }
 
