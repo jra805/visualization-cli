@@ -8,7 +8,9 @@ export type IssueType =
   | "prop-drilling"
   | "layering-violation"
   | "hotspot"
-  | "temporal-coupling";
+  | "temporal-coupling"
+  | "bus-factor"
+  | "stale-code";
 
 export interface Issue {
   type: IssueType;

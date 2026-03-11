@@ -75,6 +75,85 @@ describe("game-map", () => {
       expect(locations[0].isGodModule).toBe(true);
     });
 
+    it("populates threats from issues array", () => {
+      const graph = createGraph();
+      addNode(graph, { id: "a.ts", filePath: "a.ts", label: "a", moduleType: "service", loc: 50, directory: "" });
+      addNode(graph, { id: "b.ts", filePath: "b.ts", label: "b", moduleType: "component", loc: 30, directory: "" });
+      const report = makeReport({
+        issues: [
+          { type: "high-coupling", severity: "warning", message: "too coupled", files: ["a.ts"] },
+          { type: "layering-violation", severity: "warning", message: "bad import", files: ["a.ts", "b.ts"] },
+        ],
+      });
+      const serialized = serializeGraph(graph, report, [], []);
+      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+
+      const locA = locations.find(l => l.label === "a")!;
+      expect(locA.threats).toHaveLength(2);
+      expect(locA.threats.map(t => t.type)).toContain("high-coupling");
+      expect(locA.threats.map(t => t.type)).toContain("layering-violation");
+      expect(locA.condition).toBe("damaged"); // warning = damaged
+
+      const locB = locations.find(l => l.label === "b")!;
+      expect(locB.threats).toHaveLength(1);
+      expect(locB.threats[0].type).toBe("layering-violation");
+    });
+
+    it("sets condition to ruined for orphans", () => {
+      const graph = createGraph();
+      addNode(graph, { id: "orphan.ts", filePath: "orphan.ts", label: "orphan", moduleType: "util", loc: 10, directory: "" });
+      const report = makeReport({
+        orphans: ["orphan.ts"],
+        issues: [{ type: "orphan-module", severity: "info", message: "orphan", files: ["orphan.ts"] }],
+      });
+      const serialized = serializeGraph(graph, report, [], []);
+      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+
+      expect(locations[0].condition).toBe("ruined");
+      expect(locations[0].threats.some(t => t.type === "orphan-module")).toBe(true);
+    });
+
+    it("sets condition to burning for error-severity threats", () => {
+      const graph = createGraph();
+      addNode(graph, { id: "x.ts", filePath: "x.ts", label: "x", moduleType: "component", loc: 10, directory: "" });
+      const report = makeReport({
+        circularDeps: [["x.ts", "y.ts"]],
+        issues: [{ type: "circular-dependency", severity: "error", message: "cycle", files: ["x.ts"] }],
+      });
+      const serialized = serializeGraph(graph, report, [], []);
+      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+
+      expect(locations[0].condition).toBe("burning");
+      expect(locations[0].threats.some(t => t.type === "circular-dependency")).toBe(true);
+    });
+
+    it("accumulates multiple threats on same node", () => {
+      const graph = createGraph();
+      addNode(graph, { id: "bad.ts", filePath: "bad.ts", label: "bad", moduleType: "service", loc: 1200, directory: "" });
+      const report = makeReport({
+        issues: [
+          { type: "god-module", severity: "warning", message: "big", files: ["bad.ts"] },
+          { type: "hotspot", severity: "error", message: "hot", files: ["bad.ts"] },
+          { type: "high-coupling", severity: "warning", message: "coupled", files: ["bad.ts"] },
+        ],
+      });
+      const serialized = serializeGraph(graph, report, [], []);
+      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+
+      expect(locations[0].threats).toHaveLength(3);
+      expect(locations[0].condition).toBe("burning"); // error takes priority
+    });
+
+    it("healthy nodes have empty threats and healthy condition", () => {
+      const graph = createGraph();
+      addNode(graph, { id: "ok.ts", filePath: "ok.ts", label: "ok", moduleType: "util", loc: 20, directory: "" });
+      const serialized = serializeGraph(graph, makeReport(), [], []);
+      const locations = mapNodesToLocations(serialized.nodes, undefined, []);
+
+      expect(locations[0].threats).toHaveLength(0);
+      expect(locations[0].condition).toBe("healthy");
+    });
+
     it("carries through component metadata", () => {
       const graph = createGraph();
       addNode(graph, { id: "x.tsx", filePath: "x.tsx", label: "X", moduleType: "component", loc: 10, directory: "" });
@@ -253,6 +332,97 @@ describe("game-map", () => {
       expect(data.terrain.length).toBeGreaterThan(0);
       expect(data.gridWidth).toBeGreaterThanOrEqual(20);
       expect(data.report.totalModules).toBe(2);
+    });
+
+    it("contains threat sprite functions in HTML output", () => {
+      const graph = makeTestGraph();
+      const html = generateGameMapHtml(graph, makeReport(), [], []);
+
+      expect(html).toContain("drawSkullMarker");
+      expect(html).toContain("drawCorruptionFog");
+      expect(html).toContain("drawRuinedOverlay");
+      expect(html).toContain("drawCracks");
+      expect(html).toContain("drawWarningFlag");
+      expect(html).toContain("drawSmokePlume");
+      expect(html).toContain("drawCongestionMarker");
+      expect(html).toContain("drawTunnelEntrance");
+    });
+
+    it("shows threat severity counts in header", () => {
+      const graph = makeTestGraph();
+      const report = makeReport({
+        issues: [
+          { type: "circular-dependency", severity: "error", message: "cycle", files: ["src/App.tsx"] },
+          { type: "god-module", severity: "warning", message: "big", files: ["src/Header.tsx"] },
+          { type: "orphan-module", severity: "info", message: "orphan", files: ["src/types.ts"] },
+        ],
+      });
+      const html = generateGameMapHtml(graph, report, [], []);
+
+      expect(html).toContain("1 attacks");
+      expect(html).toContain("1 deteriorating");
+      expect(html).toContain("1 neglected");
+    });
+
+    it("contains health badge and threat log elements", () => {
+      const graph = makeTestGraph();
+      const html = generateGameMapHtml(graph, makeReport(), [], []);
+
+      expect(html).toContain("health-badge");
+      expect(html).toContain("health-score");
+      expect(html).toContain("Kingdom Health");
+      expect(html).toContain("threat-log");
+      expect(html).toContain("THREAT LOG");
+      expect(html).toContain("threat-log-list");
+      expect(html).toContain("panToLocation");
+      expect(html).toContain("computeHealthScore");
+    });
+
+    it("marks layer violation paths with isViolation", () => {
+      const graph = createGraph();
+      addNode(graph, { id: "src/repo.ts", filePath: "src/repo.ts", label: "repo", moduleType: "repository", loc: 50, directory: "src" });
+      addNode(graph, { id: "src/Page.tsx", filePath: "src/Page.tsx", label: "Page", moduleType: "page", loc: 30, directory: "src" });
+      addEdge(graph, { source: "src/repo.ts", target: "src/Page.tsx", type: "import" });
+
+      const report = makeReport({
+        issues: [
+          { type: "layering-violation", severity: "warning", message: "data imports presentation", files: ["src/repo.ts", "src/Page.tsx"] },
+        ],
+      });
+
+      const html = generateGameMapHtml(graph, report, [], []);
+      const match = html.match(/<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/);
+      const data = JSON.parse(match![1]);
+
+      const violationPath = data.paths.find((p: any) => p.sourceId === "src/repo.ts" && p.targetId === "src/Page.tsx");
+      expect(violationPath).toBeDefined();
+      expect(violationPath.isViolation).toBe(true);
+
+      // Non-violation paths should have isViolation = false
+      const otherPaths = data.paths.filter((p: any) => !p.isViolation);
+      // There should be no other paths in this simple graph (only 1 edge)
+      expect(data.paths.length).toBe(1);
+    });
+
+    it("renders violation path styling in HTML", () => {
+      const graph = makeTestGraph();
+      const html = generateGameMapHtml(graph, makeReport(), [], []);
+
+      expect(html).toContain("VIOLATION_COLOR");
+      expect(html).toContain("isViolation");
+      expect(html).toContain("Violation (Smuggler)");
+    });
+
+    it("contains threat severity filter buttons", () => {
+      const graph = makeTestGraph();
+      const html = generateGameMapHtml(graph, makeReport(), [], []);
+
+      expect(html).toContain('data-sev="error"');
+      expect(html).toContain('data-sev="warning"');
+      expect(html).toContain('data-sev="info"');
+      expect(html).toContain("Attacks");
+      expect(html).toContain("Decay");
+      expect(html).toContain("Neglect");
     });
 
     it("sanitizes location data against XSS", () => {

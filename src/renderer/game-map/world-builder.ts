@@ -29,6 +29,7 @@ export interface GamePath {
   targetId: string;
   edgeType: string;
   isCircular: boolean;
+  isViolation: boolean; // true = layer violation (lower layer importing upper)
   isCrossRegion: boolean; // true = highway (crosses community boundary)
   importance: number; // path width hint based on connected node importance
   points: [number, number][];
@@ -118,12 +119,22 @@ export function generateTerrain(
   const moistureScale = Math.max(width, height) * 0.3;
   const detailScale = Math.max(width, height) * 0.12;
 
-  // Build set of protected tiles near locations
+  // Build set of protected tiles near locations (tight: directly under building)
+  // and transition tiles (1 tile buffer around building for softer blending)
   const protected_ = new Set<string>();
+  const transition_ = new Set<string>();
   for (const loc of locations) {
-    for (let dy = -2; dy <= loc.tileSize + 1; dy++) {
-      for (let dx = -2; dx <= loc.tileSize + 1; dx++) {
+    for (let dy = 0; dy < loc.tileSize; dy++) {
+      for (let dx = 0; dx < loc.tileSize; dx++) {
         protected_.add(`${loc.gridX + dx},${loc.gridY + dy}`);
+      }
+    }
+    for (let dy = -1; dy <= loc.tileSize; dy++) {
+      for (let dx = -1; dx <= loc.tileSize; dx++) {
+        const key = `${loc.gridX + dx},${loc.gridY + dy}`;
+        if (!protected_.has(key)) {
+          transition_.add(key);
+        }
       }
     }
   }
@@ -179,6 +190,7 @@ export function generateTerrain(
       const det = detail[y][x];
       const edge = edgeFalloff(x, y);
       const isProtected = protected_.has(`${x},${y}`);
+      const isTransition = transition_.has(`${x},${y}`);
       const biome = getRegionBiome(x, y);
 
       // Combine elevation with edge falloff for natural coastline
@@ -186,10 +198,25 @@ export function generateTerrain(
       const effectiveElev = elev * (0.3 + 0.7 * edge);
 
       if (isProtected) {
-        // Near buildings: biome-tinted grass for readability
+        // Directly under buildings: use biome-appropriate ground (not just grass)
         if (biome) {
           const bt = BIOME_TERRAIN[biome];
-          terrain[y][x] = det > 0.65 ? bt.accent : Math.floor(det * 4);
+          // Mix primary and accent for subtle variation
+          terrain[y][x] = det > 0.6 ? bt.accent : bt.primary;
+        } else {
+          terrain[y][x] = Math.floor(det * 3.99);
+        }
+      } else if (isTransition) {
+        // 1-tile buffer: blend between biome ground and surrounding terrain
+        if (biome) {
+          const bt = BIOME_TERRAIN[biome];
+          if (det > 0.7) {
+            terrain[y][x] = bt.secondary;
+          } else if (det > 0.4) {
+            terrain[y][x] = bt.primary;
+          } else {
+            terrain[y][x] = bt.accent;
+          }
         } else {
           terrain[y][x] = Math.floor(det * 3.99);
         }
@@ -316,6 +343,7 @@ export function routePaths(
       targetId: edge.data.target,
       edgeType: edge.data.type,
       isCircular: edge.data.isCircular,
+      isViolation: false,
       isCrossRegion: src.community !== tgt.community,
       importance,
       points,

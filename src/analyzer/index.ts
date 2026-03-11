@@ -9,6 +9,8 @@ import { detectLayeringViolations } from "./layer-detector.js";
 import { detectArchitecturePattern } from "./architecture-patterns.js";
 import { detectHotspots } from "./hotspots.js";
 import { detectTemporalCoupling } from "./temporal-coupling.js";
+import { detectBusFactors } from "./bus-factor.js";
+import { detectStaleness } from "./staleness.js";
 
 export interface AnalyzeOptions {
   skipIssues?: boolean;
@@ -84,6 +86,36 @@ export async function analyze(
           message: `Temporal coupling: co-changed ${tc.coChangeCount} times (${(tc.confidence * 100).toFixed(0)}% confidence) with no import`,
           files: [tc.fileA, tc.fileB],
         });
+      }
+    }
+
+    // Bus factor detection
+    const busFactors = detectBusFactors(graph, options.rootDir);
+    if (!options.skipIssues) {
+      for (const [filePath, data] of busFactors) {
+        if (data.busFactor <= 1 && data.authors.length > 0) {
+          issues.push({
+            type: "bus-factor",
+            severity: "warning",
+            message: `Bus factor = ${data.busFactor}: only ${data.authors[0]?.name ?? "one author"} maintains this file (${data.authors[0]?.commits ?? 0} commits)`,
+            files: [filePath],
+          });
+        }
+      }
+    }
+
+    // Stale code detection
+    const staleness = detectStaleness(graph, options.rootDir);
+    if (!options.skipIssues) {
+      for (const [filePath, data] of staleness) {
+        if (data.staleLevel === "dusty" || data.staleLevel === "abandoned") {
+          issues.push({
+            type: "stale-code",
+            severity: "info",
+            message: `Stale code: last commit ${data.staleDays} days ago (${data.staleLevel})`,
+            files: [filePath],
+          });
+        }
       }
     }
   }

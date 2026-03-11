@@ -17,6 +17,9 @@ export interface GameMapData {
     issueCount: number;
     circularCount: number;
     orphanCount: number;
+    errorCount: number;
+    warningCount: number;
+    infoCount: number;
   };
 }
 
@@ -126,6 +129,126 @@ canvas#game-canvas.grabbing { cursor: grabbing; }
   display: none;
 }
 .detail-panel.open { display: block; }
+
+.threat-log {
+  width: 300px;
+  background: #16213e;
+  border-left: 3px solid #5a3a1a;
+  padding: 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  display: none;
+}
+.threat-log.open { display: flex; flex-direction: column; }
+.threat-log-header {
+  padding: 8px 10px;
+  border-bottom: 1px solid #5a3a1a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.threat-log-header h2 {
+  font-size: 12px;
+  color: #ffdd44;
+  letter-spacing: 1px;
+  margin: 0;
+}
+.threat-log-close {
+  background: none;
+  border: 1px solid #5a3a1a;
+  color: #f0e6d0;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.threat-log-close:hover { color: #cc3333; border-color: #cc3333; }
+.threat-log-filters {
+  padding: 6px 10px;
+  border-bottom: 1px solid #5a3a1a;
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.threat-filter {
+  padding: 2px 6px;
+  font-size: 9px;
+  font-family: monospace;
+  cursor: pointer;
+  border: 1px solid #5a3a1a;
+  background: transparent;
+  color: #6B7280;
+}
+.threat-filter.active { color: #f0e6d0; }
+.threat-filter.sev-error.active { color: #cc3333; border-color: #cc3333; }
+.threat-filter.sev-warning.active { color: #cc8800; border-color: #cc8800; }
+.threat-filter.sev-info.active { color: #6B7280; border-color: #6B7280; }
+.threat-log-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+}
+.threat-entry {
+  padding: 5px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid #0f3460;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.threat-entry:hover { background: #0f3460; }
+.threat-sev {
+  flex-shrink: 0;
+  font-size: 9px;
+  padding: 1px 4px;
+  border: 1px solid;
+  margin-top: 1px;
+}
+.threat-sev.error { color: #cc3333; border-color: #cc3333; }
+.threat-sev.warning { color: #cc8800; border-color: #cc8800; }
+.threat-sev.info { color: #6B7280; border-color: #6B7280; }
+.threat-info {
+  flex: 1;
+  min-width: 0;
+}
+.threat-type {
+  font-size: 10px;
+  color: #f0e6d0;
+}
+.threat-file {
+  font-size: 9px;
+  color: #6B7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 50;
+  background: #16213eee;
+  border: 2px solid #5a3a1a;
+  padding: 6px 10px;
+  font-family: monospace;
+  text-align: center;
+  cursor: pointer;
+}
+.health-badge:hover { border-color: #ffdd44; }
+.health-score {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.health-label {
+  font-size: 8px;
+  color: #8E99A4;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
 
 .detail-panel h2 {
   font-size: 12px;
@@ -244,13 +367,14 @@ canvas#minimap {
 .controls {
   position: absolute;
   top: 8px;
-  right: 316px;
+  right: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   z-index: 50;
 }
-.detail-panel:not(.open) ~ .controls { right: 8px; }
+.detail-panel.open ~ .controls { right: 316px; }
+.threat-log.open ~ .controls { right: 316px; }
 
 .ctrl-btn {
   background: #16213eee;
@@ -278,7 +402,9 @@ canvas#minimap {
     <span class="chip">${gameData.report.totalModules} locations</span>
     <span class="chip">${gameData.report.totalEdges} routes</span>
     <span class="chip">${gameData.communityCount} regions</span>
-    <span class="chip ${gameData.report.issueCount > 0 ? "warn" : "ok"}">${gameData.report.issueCount} threats</span>
+    <span class="chip ${gameData.report.errorCount > 0 ? "warn" : "ok"}">${gameData.report.errorCount} attacks</span>
+    <span class="chip ${gameData.report.warningCount > 0 ? "warn" : "ok"}">${gameData.report.warningCount} deteriorating</span>
+    <span class="chip">${gameData.report.infoCount} neglected</span>
   </div>
 </div>
 
@@ -292,7 +418,24 @@ canvas#minimap {
 <div class="main-area">
   <canvas id="game-canvas"></canvas>
   <div class="detail-panel" id="detail"></div>
+  <div class="threat-log" id="threat-log">
+    <div class="threat-log-header">
+      <h2>THREAT LOG</h2>
+      <button class="threat-log-close" id="threat-log-close">X</button>
+    </div>
+    <div class="threat-log-filters">
+      <button class="threat-filter sev-error active" data-sev="error">Attacks</button>
+      <button class="threat-filter sev-warning active" data-sev="warning">Decay</button>
+      <button class="threat-filter sev-info active" data-sev="info">Neglect</button>
+    </div>
+    <div class="threat-log-list" id="threat-log-list"></div>
+  </div>
   <div class="tooltip" id="tooltip"></div>
+
+  <div class="health-badge" id="health-badge" title="Click to open Threat Log">
+    <div class="health-score" id="health-score">--</div>
+    <div class="health-label">Kingdom Health</div>
+  </div>
 
   <div class="legend-panel" id="legend">
     <h3>MAP LEGEND</h3>
@@ -326,11 +469,20 @@ canvas#minimap {
     <div class="legend-item"><div class="legend-line" style="background:#c4a265"></div> Local (Road)</div>
     <div class="legend-item"><div class="legend-line" style="background:#d4a017"></div> Cross-Region (Highway)</div>
     <div class="legend-item"><div class="legend-line" style="background:#cc3333"></div> Circular (Cursed)</div>
+    <div class="legend-item"><div class="legend-line" style="background:#cc3333;border-top:1px dashed #ff4444"></div> Violation (Smuggler)</div>
     <div style="margin:6px 0;color:#d4a017">-- Markers --</div>
-    <div class="legend-item" style="color:#cc3333">!! Cursed = Circular Dep</div>
-    <div class="legend-item" style="color:#6B7280">~~ Ghosted = Orphan</div>
     <div class="legend-item" style="color:#ffdd44">** Crown = God Module</div>
     <div class="legend-item" style="color:#44aaff">++ Bridge = Articulation Pt</div>
+    <div style="margin:6px 0;color:#cc3333">-- Threats --</div>
+    <div class="legend-item" style="color:#e8e0d0">&#9760; Skull = Circular Dep</div>
+    <div class="legend-item" style="color:#9040a0">~~ Corruption = Cycle Fog</div>
+    <div class="legend-item" style="color:#808080">&#9729; Smoke = Hotspot</div>
+    <div class="legend-item" style="color:#6B7280">&#127793; Ruins = Orphan</div>
+    <div class="legend-item" style="color:#cc8800">&#9873; Flag = Warning</div>
+    <div class="legend-item" style="color:#cc6600">&#8644; Congestion = Coupling</div>
+    <div class="legend-item" style="color:#8a7a60">&#8614; Tunnel = Temporal</div>
+    <div class="legend-item" style="color:#ccaa44">&#9399; Tower = Bus Factor</div>
+    <div class="legend-item" style="color:#a09880">&#9729; Dust = Stale Code</div>
   </div>
 
   <div class="minimap-container">
@@ -394,6 +546,7 @@ canvas#minimap {
   var ROAD_COLOR =    { main: "#c4a265", glow: "#d4b275" };  // local (same region)
   var HIGHWAY_COLOR = { main: "#d4a017", glow: "#e4b027" };  // cross-region
   var TEMPORAL_COLOR = { main: "#f59e0b", glow: "#fbbf24" };
+  var VIOLATION_COLOR = { main: "#cc3333", glow: "#ff4444" }; // layer violation (smuggler route)
   var CURSED_COLOR = "#cc3333";
 
   // === CANVAS SETUP ===
@@ -405,7 +558,9 @@ canvas#minimap {
   function resize() {
     var rect = canvas.parentElement.getBoundingClientRect();
     var detailOpen = document.getElementById("detail").classList.contains("open");
-    canvas.width = rect.width - (detailOpen ? 300 : 0);
+    var threatLogOpen = document.getElementById("threat-log").classList.contains("open");
+    var panelWidth = (detailOpen ? 300 : 0) + (threatLogOpen ? 300 : 0);
+    canvas.width = rect.width - panelWidth;
     canvas.height = rect.height;
     dirty = true;
   }
@@ -545,15 +700,13 @@ canvas#minimap {
       // Depth variation
       ctx.fillStyle = "#3268a0";
       ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 6), 8, 6);
-      // Animated wave highlights
+      // Static wave highlights (seeded per-tile for variety)
       ctx.fillStyle = "#5b8bc5";
-      var waveOff = (animFrame + Math.floor(d.r1 * 8)) % 14;
-      ctx.fillRect(px + waveOff % 12, py + 3, 4, 1);
-      ctx.fillRect(px + ((waveOff + 7) % 13), py + 9, 3, 1);
-      // Foam/sparkle
+      ctx.fillRect(px + Math.floor(d.r1 * 10), py + 3, 4, 1);
+      ctx.fillRect(px + Math.floor(d.r3 * 9) + 2, py + 9, 3, 1);
+      // Static foam/sparkle
       ctx.fillStyle = "#8ab8e0";
-      var foamOff = (animFrame + Math.floor(d.r3 * 10)) % 12;
-      ctx.fillRect(px + foamOff % 11 + 2, py + 6, 2, 1);
+      ctx.fillRect(px + Math.floor(d.r4 * 10) + 2, py + 6, 2, 1);
       // Deep shadow
       if (d.r4 > 0.6) {
         ctx.fillStyle = "#1e4a78";
@@ -1146,6 +1299,191 @@ canvas#minimap {
     test: drawLargeCastle
   };
 
+  // === THREAT SPRITE FUNCTIONS ===
+
+  // Skull marker for circular dependencies — drawn at top-right of building
+  function drawSkullMarker(bx, by, bSize) {
+    var sx = bSize - 10, sy = -10;
+    // Cranium
+    ctx.fillStyle = "#e8e0d0";
+    ctx.fillRect(bx + sx + 1, by + sy, 6, 5);
+    ctx.fillRect(bx + sx + 2, by + sy + 5, 4, 2);
+    // Eye sockets
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(bx + sx + 2, by + sy + 2, 2, 2);
+    ctx.fillRect(bx + sx + 5, by + sy + 2, 2, 2);
+    // Nose
+    ctx.fillRect(bx + sx + 4, by + sy + 4, 1, 1);
+    // Jaw line
+    ctx.fillRect(bx + sx + 3, by + sy + 6, 1, 1);
+    ctx.fillRect(bx + sx + 5, by + sy + 6, 1, 1);
+  }
+
+  // Purple corruption fog for circular dependencies — animated wisps
+  function drawCorruptionFog(bx, by, bSize) {
+    var fogColors = ["rgba(120,30,160,0.25)", "rgba(90,20,120,0.2)", "rgba(140,40,180,0.15)", "rgba(100,20,140,0.18)"];
+    for (var fi = 0; fi < 5; fi++) {
+      var fx = Math.floor(Math.sin(animFrame * 0.04 + fi * 1.3) * bSize * 0.35);
+      var fy = Math.floor(Math.cos(animFrame * 0.035 + fi * 1.1) * 5);
+      var fWidth = Math.floor(bSize * 0.3 + Math.sin(animFrame * 0.06 + fi) * 3);
+      ctx.fillStyle = fogColors[fi % fogColors.length];
+      ctx.fillRect(bx + fx + bSize * 0.2, by + fy + bSize * 0.25, fWidth, 3 + (fi % 2));
+    }
+  }
+
+  // Ruined overlay for orphan modules — crumbling walls, vines, cobweb
+  function drawRuinedOverlay(bx, by, bSize) {
+    // Missing chunks at top (broken wall)
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(bx + 2, by, 3, 2);
+    ctx.fillRect(bx + bSize - 6, by + 1, 4, 2);
+    if (bSize > 20) {
+      ctx.fillRect(bx + Math.floor(bSize * 0.4), by, 2, 3);
+    }
+    // Vines climbing left wall
+    ctx.fillStyle = "#2a6a28";
+    ctx.fillRect(bx, by + 3, 1, Math.floor(bSize * 0.5));
+    ctx.fillStyle = "#3a8a38";
+    ctx.fillRect(bx + 1, by + 5, 1, 3);
+    ctx.fillRect(bx, by + 10, 2, 1);
+    // Vine leaves
+    ctx.fillStyle = "#4aaa48";
+    ctx.fillRect(bx + 2, by + 6, 1, 1);
+    ctx.fillRect(bx + 2, by + 9, 1, 1);
+    // Cobweb at top-right corner
+    ctx.fillStyle = "rgba(200,200,200,0.35)";
+    ctx.fillRect(bx + bSize - 1, by, 1, 4);
+    ctx.fillRect(bx + bSize - 2, by, 2, 1);
+    ctx.fillRect(bx + bSize - 3, by + 1, 1, 1);
+    ctx.fillRect(bx + bSize - 4, by + 2, 1, 1);
+    // Rubble at base
+    ctx.fillStyle = "#6a6050";
+    ctx.fillRect(bx + 1, by + bSize - 2, 2, 2);
+    ctx.fillRect(bx + bSize - 4, by + bSize - 1, 3, 1);
+    ctx.fillStyle = "#5a5040";
+    ctx.fillRect(bx + 4, by + bSize - 1, 2, 1);
+  }
+
+  // Cracks on building walls for god modules
+  function drawCracks(bx, by, bSize) {
+    ctx.fillStyle = "#2a1a0a";
+    var mid = Math.floor(bSize / 2);
+    // Main vertical crack
+    ctx.fillRect(bx + mid, by + 2, 1, 3);
+    ctx.fillRect(bx + mid + 1, by + 5, 1, 2);
+    ctx.fillRect(bx + mid, by + 7, 1, 3);
+    ctx.fillRect(bx + mid - 1, by + 10, 1, 2);
+    // Branch crack
+    ctx.fillRect(bx + mid + 2, by + 6, 2, 1);
+    // Secondary crack from right
+    if (bSize > 20) {
+      ctx.fillRect(bx + bSize - 4, by + mid, 2, 1);
+      ctx.fillRect(bx + bSize - 6, by + mid + 1, 2, 1);
+      ctx.fillRect(bx + bSize - 7, by + mid + 2, 1, 2);
+    }
+  }
+
+  // Warning flag for god modules and layer violations
+  function drawWarningFlag(bx, by, bSize) {
+    // Pole
+    ctx.fillStyle = "#8a7a60";
+    ctx.fillRect(bx + 2, by - 8, 1, 10);
+    // Flag (amber triangle-ish)
+    ctx.fillStyle = "#cc8800";
+    ctx.fillRect(bx + 3, by - 8, 4, 3);
+    ctx.fillStyle = "#eea020";
+    ctx.fillRect(bx + 3, by - 7, 3, 1);
+    // Exclamation mark
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(bx + 4, by - 8, 1, 2);
+    ctx.fillRect(bx + 4, by - 5, 1, 1);
+  }
+
+  // Smoke plume rising from hotspot buildings (on top of fire)
+  function drawSmokePlume(bx, by, bSize) {
+    var smokeColors = ["rgba(90,90,90,0.4)", "rgba(110,110,110,0.3)", "rgba(130,130,130,0.22)", "rgba(150,150,150,0.15)"];
+    for (var si = 0; si < 4; si++) {
+      var sx = Math.floor(bSize / 2) + Math.floor(Math.sin(animFrame * 0.025 + si * 1.8) * 4);
+      var sy = -10 - si * 6 - Math.floor((animFrame * 0.2 + si * 4) % 10);
+      var sSize = 3 + si;
+      ctx.fillStyle = smokeColors[si];
+      ctx.fillRect(bx + sx - 1, by + sy, sSize, sSize - 1);
+    }
+  }
+
+  // Congestion marker for high-coupling nodes
+  function drawCongestionMarker(bx, by, bSize) {
+    // Small carts/boxes clustered at base showing traffic jam
+    ctx.fillStyle = "#8a6a30";
+    ctx.fillRect(bx + 1, by + bSize + 1, 3, 2);
+    ctx.fillRect(bx + bSize - 5, by + bSize + 1, 3, 2);
+    ctx.fillStyle = "#6a5020";
+    ctx.fillRect(bx + Math.floor(bSize * 0.35), by + bSize + 2, 2, 2);
+    ctx.fillRect(bx + Math.floor(bSize * 0.55), by + bSize + 1, 2, 2);
+    // Amber glow dot at center
+    ctx.fillStyle = "#ff8800";
+    ctx.globalAlpha = 0.5 + Math.sin(animFrame * 0.08) * 0.2;
+    ctx.fillRect(bx + Math.floor(bSize / 2) - 1, by + bSize, 2, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  // Tunnel entrance for temporal coupling endpoints
+  function drawTunnelEntrance(bx, by, bSize) {
+    var tx = Math.floor(bSize / 2);
+    // Dark tunnel opening
+    ctx.fillStyle = "#2a1a0a";
+    ctx.fillRect(bx + tx - 3, by + bSize - 4, 6, 4);
+    ctx.fillStyle = "#1a0a00";
+    ctx.fillRect(bx + tx - 2, by + bSize - 3, 4, 3);
+    // Stone arch frame
+    ctx.fillStyle = "#8a7a60";
+    ctx.fillRect(bx + tx - 4, by + bSize - 5, 1, 5);
+    ctx.fillRect(bx + tx + 3, by + bSize - 5, 1, 5);
+    ctx.fillRect(bx + tx - 3, by + bSize - 5, 7, 1);
+    // Animated "?" inside
+    var qAlpha = 0.5 + Math.sin(animFrame * 0.1) * 0.3;
+    ctx.fillStyle = "rgba(245,158,11," + qAlpha + ")";
+    ctx.fillRect(bx + tx - 1, by + bSize - 3, 2, 1);
+    ctx.fillRect(bx + tx, by + bSize - 2, 1, 1);
+  }
+
+  // Watchtower sprite for bus-factor = 1 (single guardian)
+  function drawWatchtower(bx, by, bSize) {
+    // Small watchtower next to building (right side)
+    var tx = bSize + 2;
+    // Tower base
+    ctx.fillStyle = "#8a7a60";
+    ctx.fillRect(bx + tx, by + bSize - 8, 4, 8);
+    // Tower top (wider platform)
+    ctx.fillStyle = "#6a5a40";
+    ctx.fillRect(bx + tx - 1, by + bSize - 10, 6, 2);
+    // Crenellations
+    ctx.fillRect(bx + tx - 1, by + bSize - 11, 2, 1);
+    ctx.fillRect(bx + tx + 3, by + bSize - 11, 2, 1);
+    // Window
+    ctx.fillStyle = "#ccaa44";
+    ctx.fillRect(bx + tx + 1, by + bSize - 6, 2, 2);
+    // "1" badge
+    ctx.fillStyle = "#cc8800";
+    ctx.fillRect(bx + tx + 1, by + bSize - 13, 2, 1);
+  }
+
+  // Dust overlay for stale code
+  function drawDustOverlay(bx, by, bSize) {
+    // Gray dust particles scattered on building
+    ctx.fillStyle = "rgba(160,150,130,0.35)";
+    ctx.fillRect(bx + 2, by + 2, 2, 1);
+    ctx.fillRect(bx + bSize - 4, by + 4, 2, 1);
+    ctx.fillRect(bx + Math.floor(bSize * 0.4), by + 1, 3, 1);
+    ctx.fillRect(bx + 1, by + Math.floor(bSize * 0.6), 2, 1);
+    ctx.fillRect(bx + bSize - 3, by + Math.floor(bSize * 0.4), 1, 2);
+    // Cobweb at top-left
+    ctx.fillStyle = "rgba(180,180,170,0.3)";
+    ctx.fillRect(bx, by, 3, 1);
+    ctx.fillRect(bx, by + 1, 2, 1);
+    ctx.fillRect(bx, by + 2, 1, 1);
+  }
+
   function drawLocation(loc) {
     var wx = loc.gridX * TILE;
     var wy = loc.gridY * TILE;
@@ -1186,6 +1524,25 @@ canvas#minimap {
 
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
+
+    // Threat-level border outline
+    if (loc.condition && loc.condition !== "healthy") {
+      var borderColor = loc.condition === "burning" ? "#cc3333"
+                      : loc.condition === "damaged" ? "#cc8800"
+                      : "#6B7280"; // ruined (info)
+      var bPad = loc.tileSize * TILE;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.9;
+      ctx.setLineDash([]);
+      ctx.strokeRect(-1, -1, bPad + 2, bPad + 2);
+      // Outer glow
+      ctx.shadowColor = borderColor;
+      ctx.shadowBlur = 6;
+      ctx.strokeRect(-1, -1, bPad + 2, bPad + 2);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
 
     // God module crown marker
     if (loc.isGodModule) {
@@ -1228,6 +1585,48 @@ canvas#minimap {
       ctx.shadowBlur = 0;
     }
 
+    // === THREAT SPRITE OVERLAYS ===
+    var threatSize = loc.tileSize * TILE;
+    if (loc.threats && loc.threats.length > 0) {
+      var drawnTypes = {};
+      for (var ti = 0; ti < loc.threats.length; ti++) {
+        var threat = loc.threats[ti];
+        if (drawnTypes[threat.type]) continue; // one sprite per type
+        drawnTypes[threat.type] = true;
+        switch (threat.type) {
+          case "circular-dependency":
+            drawSkullMarker(0, 0, threatSize);
+            drawCorruptionFog(0, 0, threatSize);
+            break;
+          case "orphan-module":
+            drawRuinedOverlay(0, 0, threatSize);
+            break;
+          case "god-module":
+            drawCracks(0, 0, threatSize);
+            drawWarningFlag(0, 0, threatSize);
+            break;
+          case "high-coupling":
+            drawCongestionMarker(0, 0, threatSize);
+            break;
+          case "hotspot":
+            drawSmokePlume(0, 0, threatSize);
+            break;
+          case "temporal-coupling":
+            drawTunnelEntrance(0, 0, threatSize);
+            break;
+          case "layering-violation":
+            drawWarningFlag(0, 0, threatSize);
+            break;
+          case "bus-factor":
+            drawWatchtower(0, 0, threatSize);
+            break;
+          case "stale-code":
+            drawDustOverlay(0, 0, threatSize);
+            break;
+        }
+      }
+    }
+
     ctx.restore();
 
     // Label below location
@@ -1249,6 +1648,7 @@ canvas#minimap {
 
   function getPathColors(p) {
     if (p.isCircular) return { main: CURSED_COLOR, glow: CURSED_COLOR };
+    if (p.isViolation) return VIOLATION_COLOR;
     if (p.edgeType === "temporal") return TEMPORAL_COLOR;
     return p.isCrossRegion ? HIGHWAY_COLOR : ROAD_COLOR;
   }
@@ -1285,7 +1685,7 @@ canvas#minimap {
     kingdom:    function() { return true; },
     trade:      function(p) { return tradeHubIds.has(p.targetId) || tradeHubIds.has(p.sourceId); },
     stronghold: function(p) { return strongholdIds.has(p.sourceId) || strongholdIds.has(p.targetId); },
-    threat:     function(p) { return p.isCircular; }
+    threat:     function(p) { return p.isCircular || p.edgeType === "temporal" || p.isViolation; }
   };
 
   var viewLocFilters = {
@@ -1297,7 +1697,8 @@ canvas#minimap {
       return strongholdIds.has(loc.id);
     },
     threat: function(loc) {
-      return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge || loc.isHotspot;
+      return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge || loc.isHotspot ||
+        (loc.threats && loc.threats.length > 0);
     }
   };
 
@@ -1438,6 +1839,8 @@ canvas#minimap {
 
   function showDetail(loc) {
     var panel = document.getElementById("detail");
+    // Close threat log when showing detail
+    document.getElementById("threat-log").classList.remove("open");
     panel.classList.add("open");
 
     // Build panel safely using DOM APIs (textContent only, no innerHTML with user data)
@@ -1458,15 +1861,33 @@ canvas#minimap {
     addField(panel, "Importance", loc.importance.toFixed(1));
     addField(panel, "File", loc.filePath);
 
-    // Issues
+    // Threats
+    var threatNames = {
+      "circular-dependency": "Cursed! (Circular Dependency)",
+      "orphan-module": "Abandoned Ruins (Orphan)",
+      "god-module": "Overburdened Citadel (God Module)",
+      "high-coupling": "Congested Crossroads (High Coupling)",
+      "hotspot": "Building on Fire! (Hotspot)",
+      "temporal-coupling": "Secret Tunnel (Temporal Coupling)",
+      "layering-violation": "Smuggler Route (Layer Violation)",
+      "prop-drilling": "Long Supply Chain (Prop Drilling)",
+      "bus-factor": "Single Guardian (Bus Factor = 1)",
+      "stale-code": "Dusty Neglect (Stale Code)"
+    };
+    var sevIcons = { "error": " [!!!]", "warning": " [!]", "info": "" };
     var issues = [];
-    if (loc.isCircular) issues.push("Circular Dependency (Cursed!)");
-    if (loc.isOrphan) issues.push("Orphaned (Abandoned)");
-    if (loc.isGodModule) issues.push("God Module (Overgrown)");
-    if (loc.isHotspot) issues.push("Hotspot (On Fire! Score: " + loc.hotspotScore.toFixed(2) + ")");
+    if (loc.threats && loc.threats.length > 0) {
+      for (var tti = 0; tti < loc.threats.length; tti++) {
+        var tt = loc.threats[tti];
+        issues.push((threatNames[tt.type] || tt.type) + sevIcons[tt.severity]);
+      }
+    }
     if (loc.isBridge) issues.push("Bridge Node (Articulation Point)");
+    if (loc.isHotspot && issues.indexOf("Building on Fire! (Hotspot)") < 0) {
+      issues.push("Hotspot (Score: " + loc.hotspotScore.toFixed(2) + ")");
+    }
     if (issues.length) {
-      addSection(panel, "Threats", issues, "issue");
+      addSection(panel, "Threats (" + loc.condition + ")", issues, "issue");
     }
 
     // Component data
@@ -1543,7 +1964,11 @@ canvas#minimap {
 
     if (loc && loc !== hoveredLoc) {
       hoveredLoc = loc;
-      tooltipEl.textContent = loc.label + " | " + loc.locationName + " | " + loc.biome + " | " + loc.loc + "L | In:" + loc.fanIn + " Out:" + loc.fanOut;
+      var tipText = loc.label + " | " + loc.locationName + " | " + loc.biome + " | " + loc.loc + "L | In:" + loc.fanIn + " Out:" + loc.fanOut;
+      if (loc.threats && loc.threats.length > 0) {
+        tipText += " | " + loc.condition.toUpperCase();
+      }
+      tooltipEl.textContent = tipText;
       tooltipEl.style.display = "block";
       tooltipEl.style.left = (e.clientX + 12) + "px";
       tooltipEl.style.top = (e.clientY - 20) + "px";
@@ -1600,6 +2025,159 @@ canvas#minimap {
     dirty = true;
   });
 
+  // === KINGDOM HEALTH SCORE ===
+  function computeHealthScore() {
+    var errorWeight = 10, warnWeight = 3, infoWeight = 1;
+    var errorCount = 0, warnCount = 0, infoCount = 0;
+    for (var hi = 0; hi < locations.length; hi++) {
+      var lt = locations[hi].threats;
+      if (!lt) continue;
+      for (var hj = 0; hj < lt.length; hj++) {
+        if (lt[hj].severity === "error") errorCount++;
+        else if (lt[hj].severity === "warning") warnCount++;
+        else infoCount++;
+      }
+    }
+    var penalty = errorCount * errorWeight + warnCount * warnWeight + infoCount * infoWeight;
+    var maxPenalty = Math.max(1, locations.length * 5);
+    return Math.max(0, Math.round(100 - (penalty / maxPenalty * 100)));
+  }
+
+  var healthScore = computeHealthScore();
+  var healthEl = document.getElementById("health-score");
+  var healthBadge = document.getElementById("health-badge");
+
+  // Color and label by tier
+  function updateHealthBadge() {
+    var color, label;
+    if (healthScore >= 80) { color = "#33cc33"; label = "Thriving Kingdom"; }
+    else if (healthScore >= 60) { color = "#cccc33"; label = "Stable Kingdom"; }
+    else if (healthScore >= 40) { color = "#cc8800"; label = "Under Stress"; }
+    else if (healthScore >= 20) { color = "#cc3333"; label = "In Peril"; }
+    else { color = "#cc3333"; label = "Kingdom Falling"; }
+    healthEl.textContent = healthScore;
+    healthEl.style.color = color;
+    healthBadge.querySelector(".health-label").textContent = label;
+    healthBadge.style.borderColor = color;
+  }
+  updateHealthBadge();
+
+  // === THREAT LOG ===
+  var threatLogVisible = { error: true, warning: true, info: true };
+
+  function panToLocation(loc) {
+    var wx = loc.gridX * TILE + (loc.tileSize * TILE) / 2;
+    var wy = loc.gridY * TILE + (loc.tileSize * TILE) / 2;
+    cam.zoom = 3;
+    cam.x = wx - (canvas.width / cam.zoom) / 2;
+    cam.y = wy - (canvas.height / cam.zoom) / 2;
+    selectedLoc = loc;
+    computeSelectedConnections();
+    showDetail(loc);
+    dirty = true;
+  }
+
+  function buildThreatLog() {
+    var list = document.getElementById("threat-log-list");
+    while (list.firstChild) list.removeChild(list.firstChild);
+
+    // Collect all threats with their locations
+    var entries = [];
+    for (var bi = 0; bi < locations.length; bi++) {
+      var bloc = locations[bi];
+      if (!bloc.threats) continue;
+      for (var bj = 0; bj < bloc.threats.length; bj++) {
+        entries.push({ loc: bloc, threat: bloc.threats[bj] });
+      }
+    }
+
+    // Sort: errors first, then warnings, then info
+    var sevOrder = { error: 0, warning: 1, info: 2 };
+    entries.sort(function(a, b) {
+      return (sevOrder[a.threat.severity] || 3) - (sevOrder[b.threat.severity] || 3);
+    });
+
+    var shown = 0;
+    for (var ei = 0; ei < entries.length; ei++) {
+      var ent = entries[ei];
+      if (!threatLogVisible[ent.threat.severity]) continue;
+      shown++;
+
+      var row = document.createElement("div");
+      row.className = "threat-entry";
+
+      var sev = document.createElement("span");
+      sev.className = "threat-sev " + ent.threat.severity;
+      sev.textContent = ent.threat.severity === "error" ? "!!!" : ent.threat.severity === "warning" ? "!" : "~";
+      row.appendChild(sev);
+
+      var info = document.createElement("div");
+      info.className = "threat-info";
+
+      var typeLine = document.createElement("div");
+      typeLine.className = "threat-type";
+      typeLine.textContent = ent.threat.type.replace(/-/g, " ");
+      info.appendChild(typeLine);
+
+      var fileLine = document.createElement("div");
+      fileLine.className = "threat-file";
+      fileLine.textContent = ent.loc.label + " (" + ent.loc.filePath + ")";
+      info.appendChild(fileLine);
+
+      row.appendChild(info);
+
+      // Click to navigate
+      (function(loc) {
+        row.addEventListener("click", function() {
+          panToLocation(loc);
+        });
+      })(ent.loc);
+
+      list.appendChild(row);
+    }
+
+    if (shown === 0) {
+      var empty = document.createElement("div");
+      empty.style.padding = "12px";
+      empty.style.color = "#6B7280";
+      empty.style.textAlign = "center";
+      empty.textContent = entries.length === 0 ? "No threats detected!" : "All filtered out";
+      list.appendChild(empty);
+    }
+  }
+
+  // Health badge click → toggle threat log
+  healthBadge.addEventListener("click", function() {
+    var logPanel = document.getElementById("threat-log");
+    var detailPanel = document.getElementById("detail");
+    if (logPanel.classList.contains("open")) {
+      logPanel.classList.remove("open");
+    } else {
+      detailPanel.classList.remove("open");
+      logPanel.classList.add("open");
+      buildThreatLog();
+    }
+    resize();
+    dirty = true;
+  });
+
+  // Close button
+  document.getElementById("threat-log-close").addEventListener("click", function() {
+    document.getElementById("threat-log").classList.remove("open");
+    resize();
+    dirty = true;
+  });
+
+  // Severity filter toggles
+  document.querySelectorAll(".threat-filter").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var sev = btn.getAttribute("data-sev");
+      threatLogVisible[sev] = !threatLogVisible[sev];
+      btn.classList.toggle("active", threatLogVisible[sev]);
+      buildThreatLog();
+    });
+  });
+
   // === ANIMATION ===
   var animFrame = 0;
 
@@ -1645,7 +2223,7 @@ canvas#minimap {
     });
 
     if (currentView === "threat") {
-      filteredPaths = paths.filter(function(p) { return p.isCircular; });
+      filteredPaths = paths.filter(function(p) { return p.isCircular || p.edgeType === "temporal" || p.isViolation; });
     }
 
     // Build set of connected path indices for quick lookup
@@ -1699,6 +2277,8 @@ canvas#minimap {
       }
       if (p.edgeType === "temporal") {
         ctx.setLineDash([6 * cam.zoom, 3 * cam.zoom]);
+      } else if (p.isViolation) {
+        ctx.setLineDash([4 * cam.zoom, 2 * cam.zoom]);
       } else {
         ctx.setLineDash([]);
       }
@@ -1723,6 +2303,23 @@ canvas#minimap {
         ctx.lineTo(aL[0] - aLen * Math.cos(aAngle + 0.4), aL[1] - aLen * Math.sin(aAngle + 0.4));
         ctx.closePath();
         ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // Violation X marker at midpoint of path
+      if (p.isViolation && p.points.length >= 2) {
+        var midIdx = Math.floor(p.points.length / 2);
+        var midPt = worldToScreen(p.points[midIdx][0] * TILE + TILE / 2, p.points[midIdx][1] * TILE + TILE / 2);
+        var xSize = 4 * cam.zoom;
+        ctx.strokeStyle = "#ff4444";
+        ctx.lineWidth = 2 * cam.zoom;
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(midPt[0] - xSize, midPt[1] - xSize);
+        ctx.lineTo(midPt[0] + xSize, midPt[1] + xSize);
+        ctx.moveTo(midPt[0] + xSize, midPt[1] - xSize);
+        ctx.lineTo(midPt[0] - xSize, midPt[1] + xSize);
+        ctx.stroke();
         ctx.globalAlpha = 1;
       }
     }

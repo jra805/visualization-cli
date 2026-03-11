@@ -1,6 +1,17 @@
 import type { SerializedNode } from "../serialize.js";
 import type { ComponentInfo, ComponentDataFlow } from "../../parser/types.js";
 import type { GraphMetrics } from "../../analyzer/graph-metrics.js";
+import type { Issue, IssueType, Severity } from "../../analyzer/types.js";
+
+export type ThreatType = IssueType;
+
+export type BuildingCondition = "healthy" | "damaged" | "ruined" | "burning";
+
+export interface Threat {
+  type: ThreatType;
+  severity: Severity;
+  message: string;
+}
 
 export type BiomeType =
   | "forest"    // UI components — dense woodland settlements
@@ -38,6 +49,8 @@ export interface GameLocation {
   community: number;
   layer: number;
   biome: BiomeType;
+  threats: Threat[];
+  condition: BuildingCondition;
   component?: ComponentInfo;
   dataFlow?: ComponentDataFlow;
   gridX: number;
@@ -159,8 +172,24 @@ const SIZE_TO_TILES: Record<string, number> = { small: 1, medium: 2, large: 3 };
 
 export function mapNodesToLocations(
   nodes: SerializedNode[],
-  metrics?: GraphMetrics
+  metrics?: GraphMetrics,
+  issues?: Issue[]
 ): GameLocation[] {
+  // Build per-node threat lookup from issues
+  const nodeThreatMap = new Map<string, Threat[]>();
+  if (issues) {
+    for (const issue of issues) {
+      for (const file of issue.files) {
+        if (!nodeThreatMap.has(file)) nodeThreatMap.set(file, []);
+        nodeThreatMap.get(file)!.push({
+          type: issue.type,
+          severity: issue.severity,
+          message: issue.message,
+        });
+      }
+    }
+  }
+
   return nodes.map((n) => {
     const d = n.data;
     const mt = d.moduleType || "unknown";
@@ -191,6 +220,32 @@ export function mapNodesToLocations(
     // Biome: check if this node is in a circular-dep cluster → volcanic
     const biome: BiomeType = d.isCircular ? "volcanic" : (MODULE_BIOME[mt] || "plains");
 
+    // Gather threats for this node from issues
+    const threats: Threat[] = [...(nodeThreatMap.get(d.id) ?? [])];
+    // Add implicit threats from boolean flags not covered by issues array
+    if (d.isHotspot && !threats.some(t => t.type === "hotspot")) {
+      threats.push({ type: "hotspot", severity: (d.hotspotScore ?? 0) >= 0.75 ? "error" : "warning", message: "Hotspot (score: " + (d.hotspotScore ?? 0).toFixed(2) + ")" });
+    }
+    if (d.isOrphan && !threats.some(t => t.type === "orphan-module")) {
+      threats.push({ type: "orphan-module", severity: "info", message: "Orphaned module — no imports or exports" });
+    }
+    if (d.isCircular && !threats.some(t => t.type === "circular-dependency")) {
+      threats.push({ type: "circular-dependency", severity: "error", message: "Part of circular dependency cycle" });
+    }
+    if (d.isGodModule && !threats.some(t => t.type === "god-module")) {
+      threats.push({ type: "god-module", severity: "warning", message: "God module — too many dependencies or too large" });
+    }
+
+    // Determine building condition based on worst threat
+    let condition: BuildingCondition = "healthy";
+    if (threats.some(t => t.severity === "error")) {
+      condition = "burning";
+    } else if (threats.some(t => t.type === "orphan-module")) {
+      condition = "ruined";
+    } else if (threats.some(t => t.severity === "warning")) {
+      condition = "damaged";
+    }
+
     return {
       id: d.id,
       label: d.label,
@@ -216,6 +271,8 @@ export function mapNodesToLocations(
       community,
       layer,
       biome,
+      threats,
+      condition,
       component: d.component,
       dataFlow: d.dataFlow,
       gridX: -1,
