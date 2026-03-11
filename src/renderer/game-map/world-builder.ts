@@ -192,6 +192,51 @@ export function generateTerrain(
   return terrain;
 }
 
+// ── Clear water/swamp under buildings — replace with biome-appropriate terrain ──
+export function clearBuildingTerrain(
+  terrain: number[][],
+  locations: GameLocation[]
+): void {
+  const height = terrain.length;
+  const width = height > 0 ? terrain[0].length : 0;
+
+  // Biome → replacement terrain tiles
+  const BIOME_TERRAIN: Record<string, number[]> = {
+    forest:   [TERRAIN.GRASS2, TERRAIN.DARK_GRASS],
+    mountain: [TERRAIN.GRASS3],
+    coastal:  [TERRAIN.COAST_SAND, TERRAIN.GRASS1],
+    castle:   [TERRAIN.CASTLE_FLOOR],
+    crystal:  [TERRAIN.CRYSTAL],
+    desert:   [TERRAIN.SAND],
+    plains:   [TERRAIN.GRASS1, TERRAIN.FLOWER],
+    volcanic: [TERRAIN.LAVA],
+    swamp:    [TERRAIN.GRASS2, TERRAIN.DARK_GRASS], // clear swamp terrain too
+  };
+
+  // Tiles that should be cleared under buildings
+  const CLEAR_TILES = new Set<number>([TERRAIN.WATER, TERRAIN.COAST_SAND, TERRAIN.SWAMP]);
+
+  const rng = mulberry32(locations.length * 31 + 77);
+
+  for (const loc of locations) {
+    const replacements = BIOME_TERRAIN[loc.biome] ?? [TERRAIN.GRASS1];
+    const buffer = 2; // 2-tile buffer around building
+
+    for (let dy = -buffer; dy < loc.tileSize + buffer; dy++) {
+      for (let dx = -buffer; dx < loc.tileSize + buffer; dx++) {
+        const tx = loc.gridX + dx;
+        const ty = loc.gridY + dy;
+        if (ty < 0 || ty >= height || tx < 0 || tx >= width) continue;
+
+        if (CLEAR_TILES.has(terrain[ty][tx])) {
+          // Pick a random replacement from the biome's palette
+          terrain[ty][tx] = replacements[Math.floor(rng() * replacements.length)];
+        }
+      }
+    }
+  }
+}
+
 export function routePaths(
   locations: GameLocation[],
   edges: SerializedEdge[]

@@ -5,7 +5,7 @@ import { serializeGraph } from "../serialize.js";
 import { computeGraphMetrics } from "../../analyzer/graph-metrics.js";
 import { mapNodesToLocations } from "./node-mapper.js";
 import { layoutLocations } from "./layout-engine.js";
-import { generateTerrain, routePaths, clearPathTerrain } from "./world-builder.js";
+import { generateTerrain, routePaths, clearPathTerrain, clearBuildingTerrain } from "./world-builder.js";
 import { buildGameMapHtml } from "./template.js";
 
 export function generateGameMapHtml(
@@ -23,6 +23,7 @@ export function generateGameMapHtml(
   const locations = mapNodesToLocations(data.nodes, metrics, report.issues);
   const grid = layoutLocations(locations, data.edges);
   const terrain = generateTerrain(grid.width, grid.height, locations, grid.regions);
+  clearBuildingTerrain(terrain, locations);
   const paths = routePaths(locations, data.edges);
 
   // Mark layer violation paths

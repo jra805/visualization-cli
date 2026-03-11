@@ -1,4 +1,4 @@
-import type { GameLocation } from "./node-mapper.js";
+import type { GameLocation, BiomeType } from "./node-mapper.js";
 import type { SerializedEdge } from "../serialize.js";
 
 export interface GridState {
@@ -59,8 +59,36 @@ export function layoutLocations(
     }
   }
 
+  // ── Compute dominant biome per community ──
+  function dominantBiome(members: GameLocation[]): BiomeType {
+    const counts = new Map<BiomeType, number>();
+    for (const m of members) {
+      counts.set(m.biome, (counts.get(m.biome) ?? 0) + 1);
+    }
+    let best: BiomeType = "plains";
+    let bestCount = 0;
+    for (const [biome, count] of counts) {
+      if (count > bestCount) { best = biome; bestCount = count; }
+    }
+    return best;
+  }
+
+  // ── Biome zone mapping — each biome gets a zone on the map ──
+  // Returns target position as fraction of grid [0..1, 0..1]
+  type ZoneAnchor = { fx: number; fy: number };
+  const BIOME_ZONES: Record<BiomeType, ZoneAnchor> = {
+    castle:   { fx: 0.50, fy: 0.45 },  // center (the capital)
+    mountain: { fx: 0.30, fy: 0.20 },  // north/northwest
+    coastal:  { fx: 0.80, fy: 0.40 },  // east edge
+    forest:   { fx: 0.20, fy: 0.65 },  // west/southwest
+    plains:   { fx: 0.50, fy: 0.80 },  // south
+    desert:   { fx: 0.55, fy: 0.78 },  // south (near plains)
+    crystal:  { fx: 0.75, fy: 0.20 },  // northeast
+    swamp:    { fx: 0.80, fy: 0.75 },  // southeast fringe
+    volcanic: { fx: 0.15, fy: 0.15 },  // far corners
+  };
+
   // ── Place communities as regions ──
-  const center = Math.floor(gridSize / 2);
   const communityPositions = new Map<number, { cx: number; cy: number; radius: number }>();
 
   // Region radius — spacious, proportional to sqrt(member count)
@@ -68,33 +96,49 @@ export function layoutLocations(
     return Math.max(6, Math.ceil(Math.sqrt(memberCount) * 4));
   }
 
-  if (sortedCommunities.length === 1) {
-    const c = sortedCommunities[0];
-    communityPositions.set(c.id, { cx: center, cy: center, radius: regionRadius(c.size) });
-  } else {
-    // Center community
-    const mainC = sortedCommunities[0];
-    communityPositions.set(mainC.id, { cx: center, cy: center, radius: regionRadius(mainC.size) });
+  // Group communities by their dominant biome zone
+  const zoneOccupants = new Map<BiomeType, typeof sortedCommunities>();
+  for (const c of sortedCommunities) {
+    const biome = dominantBiome(c.members);
+    if (!zoneOccupants.has(biome)) zoneOccupants.set(biome, []);
+    zoneOccupants.get(biome)!.push(c);
+  }
 
-    // Others placed radially with generous distance
-    const angleStep = (2 * Math.PI) / Math.max(sortedCommunities.length - 1, 1);
-    const mainRadius = regionRadius(mainC.size);
+  // Margin to keep buildings away from the very edge
+  const margin = 6;
+  const usableSize = gridSize - margin * 2;
 
-    for (let i = 1; i < sortedCommunities.length; i++) {
-      const c = sortedCommunities[i];
-      const angle = (i - 1) * angleStep - Math.PI / 2;
-      const cRadius = regionRadius(c.size);
+  for (const [biome, communities] of zoneOccupants) {
+    const anchor = BIOME_ZONES[biome];
+    const baseCx = Math.round(margin + anchor.fx * usableSize);
+    const baseCy = Math.round(margin + anchor.fy * usableSize);
 
-      // Base distance: enough to fit both regions plus wilderness gap between them
-      const connectKey = Math.min(mainC.id, c.id) + "-" + Math.max(mainC.id, c.id);
-      const connectivity = crossEdges.get(connectKey) ?? 0;
-      // More connected communities are closer, but still well separated
-      const wildernessGap = Math.max(8, 14 - connectivity);
-      const dist = mainRadius + cRadius + wildernessGap;
-
-      const cx = Math.round(center + Math.cos(angle) * dist);
-      const cy = Math.round(center + Math.sin(angle) * dist);
-      communityPositions.set(c.id, { cx, cy, radius: cRadius });
+    if (communities.length === 1) {
+      const c = communities[0];
+      communityPositions.set(c.id, { cx: baseCx, cy: baseCy, radius: regionRadius(c.size) });
+    } else {
+      // Offset multiple communities within the same zone so they don't overlap
+      // Arrange in a small cluster around the zone anchor
+      const offsetStep = (2 * Math.PI) / communities.length;
+      for (let i = 0; i < communities.length; i++) {
+        const c = communities[i];
+        const cRadius = regionRadius(c.size);
+        // First community goes at anchor; others offset around it
+        if (i === 0) {
+          communityPositions.set(c.id, { cx: baseCx, cy: baseCy, radius: cRadius });
+        } else {
+          const angle = (i - 1) * offsetStep - Math.PI / 2;
+          const firstRadius = regionRadius(communities[0].size);
+          // Connectivity-aware: connected communities stay closer
+          const connectKey = Math.min(communities[0].id, c.id) + "-" + Math.max(communities[0].id, c.id);
+          const connectivity = crossEdges.get(connectKey) ?? 0;
+          const gap = Math.max(6, 12 - connectivity);
+          const dist = firstRadius + cRadius + gap;
+          const cx = Math.round(baseCx + Math.cos(angle) * dist);
+          const cy = Math.round(baseCy + Math.sin(angle) * dist);
+          communityPositions.set(c.id, { cx, cy, radius: cRadius });
+        }
+      }
     }
   }
 
@@ -171,11 +215,16 @@ export function layoutLocations(
         tx = Math.round(avgX * 0.4 + regionPos.cx * 0.6);
         ty = Math.round(avgY * 0.4 + regionPos.cy * 0.6);
       } else {
-        // Spiral within region — wider spacing
-        const spiralAngle = mi * 2.4;
-        const spiralR = Math.floor(Math.sqrt(mi) * 3.5);
-        tx = Math.round(regionPos.cx + Math.cos(spiralAngle) * spiralR);
-        ty = Math.round(regionPos.cy + Math.sin(spiralAngle) * spiralR);
+        // Layer-stratified grid: high-layer nodes at top/center, low-layer at bottom/edges
+        // Members are already sorted by layer desc, then importance desc
+        const cols = Math.max(2, Math.ceil(Math.sqrt(members.length)));
+        const row = Math.floor(mi / cols);
+        const col = mi % cols;
+        const spacing = 3;
+        const gridW = cols * spacing;
+        const gridH = Math.ceil(members.length / cols) * spacing;
+        tx = Math.round(regionPos.cx - gridW / 2 + col * spacing);
+        ty = Math.round(regionPos.cy - gridH / 2 + row * spacing);
       }
 
       // Orphans pushed to the outskirts
