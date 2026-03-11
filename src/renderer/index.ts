@@ -17,33 +17,67 @@ export async function render(
   report: ArchReport,
   components: ComponentInfo[],
   dataFlows: ComponentDataFlow[],
-  options: RenderOptions
+  options: RenderOptions,
 ): Promise<void> {
-  fs.mkdirSync(options.outputDir, { recursive: true });
-
   const format = options.format ?? "interactive";
   let outputPath: string;
 
+  // Determine default filename per format
+  const defaultFilename =
+    format === "mermaid"
+      ? "architecture.html"
+      : format === "game"
+        ? "game-map.html"
+        : format === "treemap"
+          ? "treemap.html"
+          : format === "svg"
+            ? "architecture.svg"
+            : "interactive.html";
+
+  // If outputDir looks like a file path (has a known extension), use it directly
+  const ext = path.extname(options.outputDir).toLowerCase();
+  const isFilePath = [".html", ".svg", ".htm"].includes(ext);
+
+  if (isFilePath) {
+    // -o pointed to a file: remove stale directory if one exists, use parent as dir
+    const stat = fs.statSync(options.outputDir, { throwIfNoEntry: false });
+    if (stat?.isDirectory()) {
+      fs.rmSync(options.outputDir, { recursive: true });
+    }
+    outputPath = options.outputDir;
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  } else {
+    // -o pointed to a directory (or defaulted to targetDir)
+    fs.mkdirSync(options.outputDir, { recursive: true });
+    outputPath = path.join(options.outputDir, defaultFilename);
+  }
+
+  // If outputPath already exists as a directory (stale from old bug), remove it
+  const outStat = fs.statSync(outputPath, { throwIfNoEntry: false });
+  if (outStat?.isDirectory()) {
+    fs.rmSync(outputPath, { recursive: true });
+  }
+
   if (format === "mermaid") {
-    const diagrams = generateMermaidDiagrams(graph, report, components, dataFlows);
+    const diagrams = generateMermaidDiagrams(
+      graph,
+      report,
+      components,
+      dataFlows,
+    );
     const html = generateHtml(diagrams, report);
-    outputPath = path.join(options.outputDir, "architecture.html");
     fs.writeFileSync(outputPath, html, "utf-8");
   } else if (format === "game") {
     const html = generateGameMapHtml(graph, report, components, dataFlows);
-    outputPath = path.join(options.outputDir, "game-map.html");
     fs.writeFileSync(outputPath, html, "utf-8");
   } else if (format === "treemap") {
     const html = generateTreemapHtml(graph, report);
-    outputPath = path.join(options.outputDir, "treemap.html");
     fs.writeFileSync(outputPath, html, "utf-8");
   } else if (format === "svg") {
     const svg = generateSvg(graph, report);
-    outputPath = path.join(options.outputDir, "architecture.svg");
     fs.writeFileSync(outputPath, svg, "utf-8");
   } else {
     const html = generateInteractiveHtml(graph, report, components, dataFlows);
-    outputPath = path.join(options.outputDir, "interactive.html");
     fs.writeFileSync(outputPath, html, "utf-8");
   }
 

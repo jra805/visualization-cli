@@ -15,8 +15,8 @@ export function layoutLocations(
   const regions = new Map<number, { minX: number; minY: number; maxX: number; maxY: number }>();
   if (locations.length === 0) return { width: 20, height: 20, regions };
 
-  // Grid sizing — generous: lots of wilderness between settlements
-  const gridSize = Math.max(40, Math.min(180, Math.ceil(Math.sqrt(locations.length) * 12)));
+  // Grid sizing — tighter to avoid empty wilderness, with room for paths and terrain
+  const gridSize = Math.max(40, Math.min(180, Math.ceil(Math.sqrt(locations.length) * 8)));
 
   // Build adjacency
   const adj = new Map<string, Set<string>>();
@@ -74,7 +74,7 @@ export function layoutLocations(
   }
 
   // ── Biome zone mapping — each biome gets a zone on the map ──
-  // Returns target position as fraction of grid [0..1, 0..1]
+  // Zone anchors define the center of each biome's territory as fraction [0..1]
   type ZoneAnchor = { fx: number; fy: number };
   const BIOME_ZONES: Record<BiomeType, ZoneAnchor> = {
     castle:   { fx: 0.50, fy: 0.45 },  // center (the capital)
@@ -91,9 +91,9 @@ export function layoutLocations(
   // ── Place communities as regions ──
   const communityPositions = new Map<number, { cx: number; cy: number; radius: number }>();
 
-  // Region radius — spacious, proportional to sqrt(member count)
+  // Region radius — proportional to sqrt(member count)
   function regionRadius(memberCount: number): number {
-    return Math.max(6, Math.ceil(Math.sqrt(memberCount) * 4));
+    return Math.max(5, Math.ceil(Math.sqrt(memberCount) * 3.5));
   }
 
   // Group communities by their dominant biome zone
@@ -104,12 +104,64 @@ export function layoutLocations(
     zoneOccupants.get(biome)!.push(c);
   }
 
+  // Count total nodes per zone to detect dominant biomes
+  const totalNodes = locations.length;
+  const zoneNodeCounts = new Map<BiomeType, number>();
+  for (const [biome, communities] of zoneOccupants) {
+    const count = communities.reduce((s, c) => s + c.size, 0);
+    zoneNodeCounts.set(biome, count);
+  }
+
+  // ── Remap zone anchors to fill the grid based on populated zones ──
+  // Collect raw anchors for populated zones only
+  const populatedAnchors: { biome: BiomeType; fx: number; fy: number }[] = [];
+  for (const biome of zoneOccupants.keys()) {
+    const a = BIOME_ZONES[biome];
+    populatedAnchors.push({ biome, fx: a.fx, fy: a.fy });
+  }
+
+  // Compute effective (remapped) anchors that fill the usable area
+  const effectiveAnchors = new Map<BiomeType, { fx: number; fy: number }>();
+  if (populatedAnchors.length <= 1) {
+    // Single zone: center it
+    for (const a of populatedAnchors) {
+      effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.5 });
+    }
+  } else {
+    // Find bounding box of populated zone anchors
+    let minFx = 1, maxFx = 0, minFy = 1, maxFy = 0;
+    for (const a of populatedAnchors) {
+      minFx = Math.min(minFx, a.fx);
+      maxFx = Math.max(maxFx, a.fx);
+      minFy = Math.min(minFy, a.fy);
+      maxFy = Math.max(maxFy, a.fy);
+    }
+    // Remap from [minFx..maxFx] → [0.12..0.88] to fill the grid
+    const targetMin = 0.12;
+    const targetMax = 0.88;
+    const rangeFx = maxFx - minFx || 1;
+    const rangeFy = maxFy - minFy || 1;
+    for (const a of populatedAnchors) {
+      effectiveAnchors.set(a.biome, {
+        fx: targetMin + ((a.fx - minFx) / rangeFx) * (targetMax - targetMin),
+        fy: targetMin + ((a.fy - minFy) / rangeFy) * (targetMax - targetMin),
+      });
+    }
+  }
+
   // Margin to keep buildings away from the very edge
-  const margin = 6;
+  const margin = 5;
   const usableSize = gridSize - margin * 2;
 
   for (const [biome, communities] of zoneOccupants) {
-    const anchor = BIOME_ZONES[biome];
+    const anchor = effectiveAnchors.get(biome)!;
+    const zoneNodes = zoneNodeCounts.get(biome) ?? 0;
+    const zoneFraction = zoneNodes / totalNodes;
+
+    // Expand zone area proportional to how many nodes it holds
+    const baseSpread = usableSize * 0.10;
+    const expandedSpread = baseSpread + (usableSize * 0.3 * zoneFraction);
+
     const baseCx = Math.round(margin + anchor.fx * usableSize);
     const baseCy = Math.round(margin + anchor.fy * usableSize);
 
@@ -117,27 +169,44 @@ export function layoutLocations(
       const c = communities[0];
       communityPositions.set(c.id, { cx: baseCx, cy: baseCy, radius: regionRadius(c.size) });
     } else {
-      // Offset multiple communities within the same zone so they don't overlap
-      // Arrange in a small cluster around the zone anchor
-      const offsetStep = (2 * Math.PI) / communities.length;
+      // Lay communities out in a grid pattern within the zone's expanded area
+      const cols = Math.max(2, Math.ceil(Math.sqrt(communities.length)));
+      const rows = Math.ceil(communities.length / cols);
+      const cellW = expandedSpread * 2 / cols;
+      const cellH = expandedSpread * 2 / rows;
+
       for (let i = 0; i < communities.length; i++) {
         const c = communities[i];
         const cRadius = regionRadius(c.size);
-        // First community goes at anchor; others offset around it
-        if (i === 0) {
-          communityPositions.set(c.id, { cx: baseCx, cy: baseCy, radius: cRadius });
-        } else {
-          const angle = (i - 1) * offsetStep - Math.PI / 2;
-          const firstRadius = regionRadius(communities[0].size);
-          // Connectivity-aware: connected communities stay closer
-          const connectKey = Math.min(communities[0].id, c.id) + "-" + Math.max(communities[0].id, c.id);
-          const connectivity = crossEdges.get(connectKey) ?? 0;
-          const gap = Math.max(6, 12 - connectivity);
-          const dist = firstRadius + cRadius + gap;
-          const cx = Math.round(baseCx + Math.cos(angle) * dist);
-          const cy = Math.round(baseCy + Math.sin(angle) * dist);
-          communityPositions.set(c.id, { cx, cy, radius: cRadius });
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+
+        // Grid position centered on the anchor
+        let cx = Math.round(baseCx - expandedSpread + col * cellW + cellW / 2);
+        let cy = Math.round(baseCy - expandedSpread + row * cellH + cellH / 2);
+
+        // Pull toward connected communities that are already placed
+        let pullX = 0, pullY = 0, pullCount = 0;
+        for (const [otherId, otherPos] of communityPositions) {
+          const connectKey = Math.min(otherId, c.id) + "-" + Math.max(otherId, c.id);
+          const connectivity = crossEdges.get(connectKey.toString()) ?? 0;
+          if (connectivity > 0) {
+            pullX += (otherPos.cx - cx) * connectivity;
+            pullY += (otherPos.cy - cy) * connectivity;
+            pullCount += connectivity;
+          }
         }
+        if (pullCount > 0) {
+          // Gentle pull toward connected communities (20% bias)
+          cx = Math.round(cx + (pullX / pullCount) * 0.2);
+          cy = Math.round(cy + (pullY / pullCount) * 0.2);
+        }
+
+        // Clamp to grid bounds
+        cx = Math.max(margin + cRadius, Math.min(gridSize - margin - cRadius, cx));
+        cy = Math.max(margin + cRadius, Math.min(gridSize - margin - cRadius, cy));
+
+        communityPositions.set(c.id, { cx, cy, radius: cRadius });
       }
     }
   }

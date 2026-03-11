@@ -6,3 +6,11 @@ test-output/
 *.tsbuildinfo
 .claude/bash_allow.json
 .claude/settings.local.json
+
+# Generated output files
+game-map.html
+architecture.html
+interactive.html
+treemap.html
+architecture.svg
+images/test-outputs/

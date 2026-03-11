@@ -22,7 +22,7 @@ export interface AnalyzeOptions {
 
 export async function analyzeCommand(
   dir: string,
-  options: AnalyzeOptions
+  options: AnalyzeOptions,
 ): Promise<void> {
   const targetDir = path.resolve(dir);
   const outputDir = path.resolve(options.output || targetDir);
@@ -35,11 +35,14 @@ export async function analyzeCommand(
       focus: options.focus,
       depth: options.depth,
     });
-    const langSummary = scanResult.languages.length > 0
-      ? scanResult.languages.map((l) => `${l.language}(${l.fileCount})`).join(", ")
-      : "unknown";
+    const langSummary =
+      scanResult.languages.length > 0
+        ? scanResult.languages
+            .map((l) => `${l.language}(${l.fileCount})`)
+            .join(", ")
+        : "unknown";
     scanSpinner.succeed(
-      `Found ${scanResult.files.length} files [${langSummary}] (${scanResult.framework}${scanResult.hasTypeScript ? " + TypeScript" : ""})`
+      `Found ${scanResult.files.length} files [${langSummary}] (${scanResult.framework}${scanResult.hasTypeScript ? " + TypeScript" : ""})`,
     );
   } catch (error) {
     scanSpinner.fail("Scan failed");
@@ -48,7 +51,9 @@ export async function analyzeCommand(
   }
 
   if (scanResult.files.length === 0) {
-    console.log(chalk.yellow("No source files found. Is this a supported project?"));
+    console.log(
+      chalk.yellow("No source files found. Is this a supported project?"),
+    );
     process.exit(0);
   }
 
@@ -58,7 +63,7 @@ export async function analyzeCommand(
   try {
     parseResult = await parse(scanResult);
     parseSpinner.succeed(
-      `Parsed ${parseResult.graph.nodes.size} modules, ${parseResult.parseResult.components.length} components`
+      `Parsed ${parseResult.graph.nodes.size} modules, ${parseResult.parseResult.components.length} components`,
     );
   } catch (error) {
     parseSpinner.fail("Parse failed");
@@ -75,10 +80,10 @@ export async function analyzeCommand(
     parseResult.circularDeps,
     scanResult.entryPoints,
     parseResult.parseResult.components,
-    { skipIssues: options.noIssues, rootDir: targetDir }
+    { skipIssues: options.noIssues, rootDir: targetDir },
   );
   analyzeSpinner.succeed(
-    `Analysis complete: ${report.issues.length} issues found`
+    `Analysis complete: ${report.issues.length} issues found`,
   );
 
   if (report.architecturePattern && report.architecturePattern !== "unknown") {
@@ -94,7 +99,9 @@ export async function analyzeCommand(
     const groupCount = groupedGraph.groups.size;
     const groupedNodeCount = groupedGraph.nodeMembership.size;
     console.log(
-      chalk.dim(`  Grouped ${groupedNodeCount} modules into ${groupCount} groups`)
+      chalk.dim(
+        `  Grouped ${groupedNodeCount} modules into ${groupCount} groups`,
+      ),
     );
   }
 
@@ -107,11 +114,25 @@ export async function analyzeCommand(
       report,
       parseResult.parseResult.components,
       parseResult.parseResult.dataFlows,
-      { outputDir, verbose: options.verbose, format: options.format }
+      { outputDir, verbose: options.verbose, format: options.format },
     );
-    const filename = options.format === "mermaid" ? "architecture.html" : options.format === "game" ? "game-map.html" : options.format === "treemap" ? "treemap.html" : options.format === "svg" ? "architecture.svg" : "interactive.html";
+    const ext = path.extname(outputDir).toLowerCase();
+    const isFilePath = [".html", ".svg", ".htm"].includes(ext);
+    const displayPath = isFilePath
+      ? outputDir
+      : outputDir +
+        "/" +
+        (options.format === "mermaid"
+          ? "architecture.html"
+          : options.format === "game"
+            ? "game-map.html"
+            : options.format === "treemap"
+              ? "treemap.html"
+              : options.format === "svg"
+                ? "architecture.svg"
+                : "interactive.html");
     renderSpinner.succeed(
-      `Visualization opened in browser → ${chalk.cyan(outputDir + "/" + filename)}`
+      `Visualization opened in browser → ${chalk.cyan(displayPath)}`,
     );
   } catch (error) {
     renderSpinner.fail("Render failed");

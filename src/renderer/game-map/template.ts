@@ -805,34 +805,29 @@ canvas#minimap {
         ctx.fillRect(px + Math.floor(d.r2 * 8) + 3, py + Math.floor(d.r3 * 6) + 2, 3, 4);
         ctx.fillRect(px + Math.floor(d.r2 * 8) + 4, py + Math.floor(d.r3 * 6) + 1, 1, 2);
       }
-      // Sparkle (animated twinkle)
+      // Sparkle (static)
       if (d.r4 > 0.6) {
         ctx.fillStyle = "#ccddff";
-        var sparkOff = (animFrame + Math.floor(d.r1 * 20)) % 8;
-        if (sparkOff < 3) {
-          ctx.fillRect(px + Math.floor(d.r3 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 1, 1);
-        }
+        ctx.fillRect(px + Math.floor(d.r3 * 10) + 3, py + Math.floor(d.r4 * 10) + 3, 1, 1);
       }
     } else if (type === 10) {
-      // Lava (volcanic, animated) — molten rock with glow
+      // Lava (volcanic) — molten rock with glow
       ctx.fillStyle = "#3a2020";
       ctx.fillRect(px, py, TILE, TILE);
       // Cooled rock patches
       ctx.fillStyle = "#4a3030";
       ctx.fillRect(px + Math.floor(d.r1 * 6), py + Math.floor(d.r2 * 6), 6, 5);
-      // Molten lava (animated)
+      // Molten lava (static)
       ctx.fillStyle = "#cc4420";
-      var lavaOff = (animFrame + Math.floor(d.r1 * 10)) % 10;
-      ctx.fillRect(px + lavaOff % 10 + 1, py + Math.floor(d.r2 * 8) + 2, 5, 3);
+      ctx.fillRect(px + Math.floor(d.r1 * 8) + 1, py + Math.floor(d.r2 * 8) + 2, 5, 3);
       // Hot glow
       if (d.r3 > 0.4) {
         ctx.fillStyle = "#ee6630";
         ctx.fillRect(px + Math.floor(d.r4 * 8) + 3, py + Math.floor(d.r1 * 8) + 3, 3, 2);
       }
-      // Bright sparks
-      ctx.fillStyle = "#ffaa44";
-      var sparkOff2 = (animFrame + Math.floor(d.r3 * 12)) % 6;
-      if (sparkOff2 < 2) {
+      // Bright sparks (static)
+      if (d.r3 > 0.5) {
+        ctx.fillStyle = "#ffaa44";
         ctx.fillRect(px + Math.floor(d.r4 * 10) + 3, py + Math.floor(d.r2 * 10) + 3, 1, 1);
       }
     } else if (type === 11) {
