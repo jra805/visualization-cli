@@ -19,6 +19,8 @@ export interface SerializedNode {
     isHotspot: boolean;
     complexity?: number;
     changeFrequency?: number;
+    changeCount?: number;
+    normalizedComplexity?: number;
     hotspotScore?: number;
     language?: string;
     parent?: string;
@@ -130,6 +132,8 @@ export function serializeGraph(
         isHotspot: hotspot?.isHotspot ?? false,
         complexity: hotspot?.complexity,
         changeFrequency: hotspot?.changeFrequency,
+        changeCount: hotspot?.changeCount,
+        normalizedComplexity: hotspot?.normalizedComplexity,
         hotspotScore: hotspot?.hotspotScore,
         language: node.language,
         parent: nodeMembership?.get(id),

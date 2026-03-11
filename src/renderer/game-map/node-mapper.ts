@@ -51,6 +51,11 @@ export interface GameLocation {
   biome: BiomeType;
   threats: Threat[];
   condition: BuildingCondition;
+  language?: string;
+  complexity: number;
+  changeFrequency: number;
+  changeCount: number;
+  normalizedComplexity: number;
   component?: ComponentInfo;
   dataFlow?: ComponentDataFlow;
   gridX: number;
@@ -273,6 +278,11 @@ export function mapNodesToLocations(
       biome,
       threats,
       condition,
+      language: d.language,
+      complexity: d.complexity ?? 0,
+      changeFrequency: d.changeFrequency ?? 0,
+      changeCount: d.changeCount ?? 0,
+      normalizedComplexity: d.normalizedComplexity ?? 0,
       component: d.component,
       dataFlow: d.dataFlow,
       gridX: -1,

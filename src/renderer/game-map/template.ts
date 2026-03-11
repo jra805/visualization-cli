@@ -292,6 +292,63 @@ canvas#game-canvas.grabbing { cursor: grabbing; }
 }
 .detail-tag.issue { color: #cc3333; border-color: #cc3333; }
 
+.intel-section {
+  margin: 10px 0;
+  padding: 8px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid #5a3a1a;
+  border-radius: 3px;
+}
+.intel-section h3 {
+  font-size: 10px;
+  color: #d4a017;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.intel-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+  font-size: 10px;
+  color: #c9d1d9;
+}
+.intel-label {
+  width: 70px;
+  flex-shrink: 0;
+  color: #8E99A4;
+}
+.intel-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: #1a1a2e;
+  border-radius: 3px;
+  margin: 0 6px;
+  overflow: hidden;
+}
+.intel-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.intel-value {
+  width: 80px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 9px;
+  color: #8E99A4;
+}
+.intel-verdict {
+  margin-top: 8px;
+  padding: 5px 7px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #f0e6d0;
+  background: rgba(90,58,26,0.4);
+  border-left: 3px solid #d4a017;
+  border-radius: 2px;
+}
+
 .tooltip {
   position: absolute;
   background: #16213e;
@@ -392,6 +449,33 @@ canvas#minimap {
   display: flex;
   gap: 4px;
 }
+
+.legend-section { margin-bottom: 6px; }
+.legend-section-title {
+  font-size: 9px;
+  color: #d4a017;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 3px;
+}
+.legend-gradient {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.legend-gradient-bar {
+  height: 8px;
+  flex: 1;
+  border: 1px solid #5a3a1a;
+}
+.legend-gradient-label {
+  font-size: 8px;
+  color: #8E99A4;
+  flex-shrink: 0;
+  width: 28px;
+}
+.legend-gradient-label.right { text-align: right; }
 </style>
 </head>
 <body>
@@ -409,10 +493,11 @@ canvas#minimap {
 </div>
 
 <div class="tabs">
-  <button class="tab active" data-view="kingdom">Kingdom Overview</button>
-  <button class="tab" data-view="trade">Trade Routes</button>
-  <button class="tab" data-view="stronghold">Strongholds</button>
-  <button class="tab" data-view="threat">Threat Map</button>
+  <button class="tab active" data-lens="kingdom">Kingdom</button>
+  <button class="tab" data-lens="dependencies">Dependencies</button>
+  <button class="tab" data-lens="complexity">Complexity</button>
+  <button class="tab" data-lens="hotspots">Hotspots</button>
+  <button class="tab" data-lens="threats">Threats</button>
 </div>
 
 <div class="main-area">
@@ -438,51 +523,7 @@ canvas#minimap {
   </div>
 
   <div class="legend-panel" id="legend">
-    <h3>MAP LEGEND</h3>
-    <div style="margin-bottom:6px;color:#d4a017">-- Locations --</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#9B6BB0"></div> Page/Layout</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#5B8DD9"></div> Component</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#4CAF7D"></div> Hook/Composable</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#45B5AA"></div> Context</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#D4854A"></div> Controller/API</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#C4A265"></div> Middleware</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#6A9BD1"></div> Service</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#CF5C5C"></div> Store</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#8B7D6B"></div> Repository</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#A09080"></div> Model/Entity</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#6A8AAA"></div> Config</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#D4A017"></div> Entry Point</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#8E99A4"></div> Utility</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#A0A8B0"></div> Types</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#7F8C8D"></div> Test</div>
-    <div style="margin:6px 0;color:#d4a017">-- Biomes --</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#2e6d3b"></div> Forest (UI)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#3b6ba5"></div> Coastal (API)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#8b7d6b"></div> Mountain (Logic)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#4a8c3f"></div> Plains (Utils)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#c4a040"></div> Desert (Types)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#4a6040"></div> Swamp (Tests)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#cc4422"></div> Volcanic (Circular)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#88aacc"></div> Crystal (Infra)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#aa8844"></div> Castle (Entry)</div>
-    <div style="margin:6px 0;color:#d4a017">-- Routes --</div>
-    <div class="legend-item"><div class="legend-line" style="background:#c4a265"></div> Local (Road)</div>
-    <div class="legend-item"><div class="legend-line" style="background:#d4a017"></div> Cross-Region (Highway)</div>
-    <div class="legend-item"><div class="legend-line" style="background:#cc3333"></div> Circular (Cursed)</div>
-    <div class="legend-item"><div class="legend-line" style="background:#cc3333;border-top:1px dashed #ff4444"></div> Violation (Smuggler)</div>
-    <div style="margin:6px 0;color:#d4a017">-- Markers --</div>
-    <div class="legend-item" style="color:#ffdd44">** Crown = God Module</div>
-    <div class="legend-item" style="color:#44aaff">++ Bridge = Articulation Pt</div>
-    <div style="margin:6px 0;color:#cc3333">-- Threats --</div>
-    <div class="legend-item" style="color:#e8e0d0">&#9760; Skull = Circular Dep</div>
-    <div class="legend-item" style="color:#9040a0">~~ Corruption = Cycle Fog</div>
-    <div class="legend-item" style="color:#808080">&#9729; Smoke = Hotspot</div>
-    <div class="legend-item" style="color:#6B7280">&#127793; Ruins = Orphan</div>
-    <div class="legend-item" style="color:#cc8800">&#9873; Flag = Warning</div>
-    <div class="legend-item" style="color:#cc6600">&#8644; Congestion = Coupling</div>
-    <div class="legend-item" style="color:#8a7a60">&#8614; Tunnel = Temporal</div>
-    <div class="legend-item" style="color:#ccaa44">&#9399; Tower = Bus Factor</div>
-    <div class="legend-item" style="color:#a09880">&#9729; Dust = Stale Code</div>
+    <div id="legend-content"></div>
   </div>
 
   <div class="minimap-container">
@@ -1512,14 +1553,15 @@ canvas#minimap {
       ctx.shadowBlur = 8 + Math.sin(animFrame * 0.15) * 4;
     }
 
-    // Draw based on size + module type
+    // Draw based on size + module type (lens-aware colors)
     var mt = loc.moduleType || "unknown";
+    var lc = getLensColors(loc);
     if (loc.sizeCategory === "large") {
-      (LARGE_DRAW[mt] || drawLargeCastle)(0, 0, loc.colorMain, loc.colorDark);
+      (LARGE_DRAW[mt] || drawLargeCastle)(0, 0, lc.main, lc.dark);
     } else if (loc.sizeCategory === "medium") {
-      (MEDIUM_DRAW[mt] || drawMediumGuild)(0, 0, loc.colorMain, loc.colorDark);
+      (MEDIUM_DRAW[mt] || drawMediumGuild)(0, 0, lc.main, lc.dark);
     } else {
-      (SMALL_DRAW[mt] || drawSmallCottage)(0, 0, loc.colorMain, loc.colorDark);
+      (SMALL_DRAW[mt] || drawSmallCottage)(0, 0, lc.main, lc.dark);
     }
 
     ctx.shadowBlur = 0;
@@ -1657,64 +1699,243 @@ canvas#minimap {
     return p.isCrossRegion ? "highway" : "road";
   }
 
-  // Precompute trade hub nodes: modules depended on by 2+ files
-  var tradeHubIds = new Set();
-  for (var thi = 0; thi < locations.length; thi++) {
-    if (locations[thi].fanIn >= 2) {
-      tradeHubIds.add(locations[thi].id);
+  // === LENS SYSTEM ===
+  var currentLens = "kingdom";
+
+  // Precompute metrics for gradient lenses
+  var maxFanIn = 1, maxFanOut = 1, maxComplexity = 1, maxHotspotScore = 0.01;
+  for (var mi = 0; mi < locations.length; mi++) {
+    if (locations[mi].fanIn > maxFanIn) maxFanIn = locations[mi].fanIn;
+    if (locations[mi].fanOut > maxFanOut) maxFanOut = locations[mi].fanOut;
+    if (locations[mi].complexity > maxComplexity) maxComplexity = locations[mi].complexity;
+    if (locations[mi].hotspotScore > maxHotspotScore) maxHotspotScore = locations[mi].hotspotScore;
+  }
+
+  // Collect unique languages
+  var langSet = {};
+  for (var mli = 0; mli < locations.length; mli++) {
+    var lang = locations[mli].language || "unknown";
+    langSet[lang] = (langSet[lang] || 0) + 1;
+  }
+
+  // Language color palette
+  var LANG_COLORS = {
+    typescript: "#3178c6", javascript: "#f7df1e", python: "#3572A5",
+    go: "#00ADD8", java: "#b07219", kotlin: "#A97BFF",
+    rust: "#dea584", csharp: "#178600", php: "#4F5D95",
+    ruby: "#701516", unknown: "#8E99A4"
+  };
+
+  // Interpolate between two hex colors
+  function lerpColor(a, b, t) {
+    var ar = parseInt(a.slice(1,3),16), ag = parseInt(a.slice(3,5),16), ab = parseInt(a.slice(5,7),16);
+    var br = parseInt(b.slice(1,3),16), bg = parseInt(b.slice(3,5),16), bb = parseInt(b.slice(5,7),16);
+    var r = Math.round(ar + (br - ar) * t);
+    var g = Math.round(ag + (bg - ag) * t);
+    var bv = Math.round(ab + (bb - ab) * t);
+    return "#" + ((1<<24)+(r<<16)+(g<<8)+bv).toString(16).slice(1);
+  }
+
+  // 3-stop gradient: low → mid → high
+  function gradientColor(t, low, mid, high) {
+    if (t < 0.5) return lerpColor(low, mid, t * 2);
+    return lerpColor(mid, high, (t - 0.5) * 2);
+  }
+
+  // Get lens-specific colors for a location
+  function getLensColors(loc) {
+    if (currentLens === "dependencies") {
+      var depTotal = loc.fanIn + loc.fanOut;
+      var depMax = maxFanIn + maxFanOut;
+      var t = depMax > 0 ? depTotal / depMax : 0;
+      var c = gradientColor(t, "#2d5a27", "#c4a020", "#cc3333");
+      return { main: c, dark: lerpColor(c, "#000000", 0.35) };
+    }
+    if (currentLens === "complexity") {
+      var ct = maxComplexity > 0 ? loc.complexity / maxComplexity : 0;
+      var cc = gradientColor(ct, "#2a6a9a", "#c4a020", "#cc3333");
+      return { main: cc, dark: lerpColor(cc, "#000000", 0.35) };
+    }
+    if (currentLens === "hotspots") {
+      if (!loc.isHotspot && loc.hotspotScore < 0.1) {
+        return { main: "#4a5568", dark: "#2d3748" }; // cool gray for non-hotspots
+      }
+      var ht = maxHotspotScore > 0 ? loc.hotspotScore / maxHotspotScore : 0;
+      var hc = gradientColor(ht, "#c4a020", "#FF6B35", "#FF0000");
+      return { main: hc, dark: lerpColor(hc, "#000000", 0.35) };
+    }
+    if (currentLens === "threats") {
+      if (!loc.threats || loc.threats.length === 0) {
+        return { main: "#33cc33", dark: "#1a8a1a" };
+      }
+      var hasError = false, hasWarn = false;
+      for (var ti = 0; ti < loc.threats.length; ti++) {
+        if (loc.threats[ti].severity === "error") hasError = true;
+        if (loc.threats[ti].severity === "warning") hasWarn = true;
+      }
+      if (hasError) return { main: "#cc3333", dark: "#8a1a1a" };
+      if (hasWarn) return { main: "#cc8800", dark: "#8a5500" };
+      return { main: "#6B7280", dark: "#4a4f5a" };
+    }
+    // kingdom: default colors
+    return { main: loc.colorMain, dark: loc.colorDark };
+  }
+
+  // Lens-specific alpha (fade unimportant items in non-kingdom lenses)
+  function getLensAlpha(loc) {
+    if (currentLens === "hotspots") {
+      return (loc.isHotspot || loc.hotspotScore >= 0.1) ? 1 : 0.35;
+    }
+    if (currentLens === "threats") {
+      return (loc.threats && loc.threats.length > 0) ? 1 : 0.35;
+    }
+    return 1;
+  }
+
+  // Path filters per lens
+  var lensPathFilters = {
+    kingdom:      function() { return true; },
+    dependencies: function() { return true; },
+    complexity:   function() { return true; },
+    hotspots:     function(p) {
+      var src = locById[p.sourceId], tgt = locById[p.targetId];
+      return (src && src.isHotspot) || (tgt && tgt.isHotspot);
+    },
+    threats:      function(p) { return p.isCircular || p.edgeType === "temporal" || p.isViolation; }
+  };
+
+  // Build a location lookup
+  var locById = {};
+  for (var lbi = 0; lbi < locations.length; lbi++) {
+    locById[locations[lbi].id] = locations[lbi];
+  }
+
+  // DOM helpers for legend (lg- prefix to avoid collision with detail panel's addSection)
+  function lgEl(tag, cls, style, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (style) e.setAttribute("style", style);
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  function lgSec(parent, title) {
+    var sec = lgEl("div", "legend-section");
+    sec.appendChild(lgEl("div", "legend-section-title", null, title));
+    parent.appendChild(sec);
+    return sec;
+  }
+
+  function lgDot(parent, color, label, itemStyle) {
+    var item = lgEl("div", "legend-item", itemStyle || null);
+    item.appendChild(lgEl("div", "legend-dot", "background:" + color));
+    item.appendChild(document.createTextNode(" " + label));
+    parent.appendChild(item);
+  }
+
+  function lgLine(parent, color, label) {
+    var item = lgEl("div", "legend-item");
+    item.appendChild(lgEl("div", "legend-line", "background:" + color));
+    item.appendChild(document.createTextNode(" " + label));
+    parent.appendChild(item);
+  }
+
+  function lgText(parent, text, style) {
+    parent.appendChild(lgEl("div", "legend-item", style || null, text));
+  }
+
+  function lgGrad(parent, lowLabel, gradient, highLabel) {
+    var row = lgEl("div", "legend-gradient");
+    row.appendChild(lgEl("span", "legend-gradient-label", null, lowLabel));
+    row.appendChild(lgEl("div", "legend-gradient-bar", "background:linear-gradient(to right," + gradient + ")"));
+    var rt = lgEl("span", "legend-gradient-label right");
+    rt.textContent = highLabel;
+    row.appendChild(rt);
+    parent.appendChild(row);
+  }
+
+  // Build dynamic legend using DOM (no innerHTML for XSS safety)
+  function buildLensLegend() {
+    var el = document.getElementById("legend-content");
+    while (el.firstChild) el.removeChild(el.firstChild);
+
+    if (currentLens === "kingdom") {
+      var biomes = [
+        ["#2e6d3b","Forest (UI)"], ["#3b6ba5","Coastal (API)"], ["#8b7d6b","Mountain (Data)"],
+        ["#4a8c3f","Plains (Utils)"], ["#c4a040","Desert (Types)"], ["#4a6040","Swamp (Tests)"],
+        ["#cc4422","Volcanic (Circular)"], ["#88aacc","Crystal (Infra)"], ["#aa8844","Castle (Services)"]
+      ];
+      var bSec = lgSec(el, "Biomes");
+      for (var bi = 0; bi < biomes.length; bi++) lgDot(bSec, biomes[bi][0], biomes[bi][1]);
+      var rSec = lgSec(el, "Routes");
+      lgLine(rSec, "#c4a265", "Local Road");
+      lgLine(rSec, "#d4a017", "Highway");
+      lgLine(rSec, "#cc3333", "Circular");
+      var mSec = lgSec(el, "Markers");
+      lgText(mSec, "** Crown = God Module", "color:#ffdd44");
+      lgText(mSec, "++ Bridge = Key Junction", "color:#44aaff");
+    } else if (currentLens === "dependencies") {
+      var dSec = lgSec(el, "Dependency Load");
+      lgGrad(dSec, "Low", "#2d5a27,#c4a020,#cc3333", "High");
+      lgText(dSec, "Color = fanIn + fanOut", "color:#8E99A4;font-size:9px");
+      lgText(dSec, "Size = building size", "color:#8E99A4;font-size:9px");
+    } else if (currentLens === "complexity") {
+      var cSec = lgSec(el, "Cyclomatic Complexity");
+      lgGrad(cSec, "Low", "#2a6a9a,#c4a020,#cc3333", "High");
+      lgText(cSec, "Color = branch complexity", "color:#8E99A4;font-size:9px");
+    } else if (currentLens === "hotspots") {
+      var hSec = lgSec(el, "Hotspot Intensity");
+      lgGrad(hSec, "Warm", "#c4a020,#FF6B35,#FF0000", "Hot");
+      lgText(hSec, "Gray = Not a hotspot", "color:#4a5568");
+      lgText(hSec, "Score = complexity x change freq", "color:#8E99A4;font-size:9px");
+    } else if (currentLens === "threats") {
+      var tSec = lgSec(el, "Threat Severity");
+      lgDot(tSec, "#cc3333", "Error (Attacks)");
+      lgDot(tSec, "#cc8800", "Warning (Decay)");
+      lgDot(tSec, "#6B7280", "Info (Neglect)");
+      lgDot(tSec, "#33cc33", "Healthy");
+      var ttSec = lgSec(el, "Threat Types");
+      var threatTypes = [
+        ["#e8e0d0","Skull = Circular Dep"], ["#808080","Smoke = Hotspot"],
+        ["#6B7280","Ruins = Orphan"], ["#cc8800","Flag = God Module"],
+        ["#cc6600","Arrows = Coupling"], ["#8a7a60","Tunnel = Temporal"],
+        ["#ccaa44","Tower = Bus Factor"], ["#a09880","Dust = Stale Code"]
+      ];
+      for (var tti = 0; tti < threatTypes.length; tti++) {
+        lgText(ttSec, threatTypes[tti][1], "color:" + threatTypes[tti][0]);
+      }
+    }
+
+    // Show language breakdown for all lenses if polyglot
+    var langKeys = Object.keys(langSet);
+    if (langKeys.length > 1) {
+      var lSec = lgSec(el, "Languages");
+      langKeys.sort(function(a,b) { return langSet[b] - langSet[a]; });
+      for (var lli = 0; lli < langKeys.length; lli++) {
+        var lk = langKeys[lli];
+        var llc = LANG_COLORS[lk] || LANG_COLORS.unknown;
+        lgDot(lSec, llc, lk + " (" + langSet[lk] + ")");
+      }
     }
   }
 
-  // Precompute stronghold nodes: top 20% by importance + bridges + entry points
-  var sortedByImportance = locations.slice().sort(function(a, b) { return b.importance - a.importance; });
-  var importanceThreshold = sortedByImportance[Math.max(0, Math.floor(locations.length * 0.2) - 1)]
-    ? sortedByImportance[Math.max(0, Math.floor(locations.length * 0.2) - 1)].importance
-    : 0;
-  var strongholdIds = new Set();
-  for (var shi = 0; shi < locations.length; shi++) {
-    var shl = locations[shi];
-    if (shl.importance >= importanceThreshold || shl.isBridge || shl.isGodModule ||
-        shl.moduleType === "entry-point" || shl.fanIn >= 3) {
-      strongholdIds.add(shl.id);
-    }
-  }
-
-  // === VIEW MODES ===
-  var currentView = "kingdom";
-  var viewFilters = {
-    kingdom:    function() { return true; },
-    trade:      function(p) { return tradeHubIds.has(p.targetId) || tradeHubIds.has(p.sourceId); },
-    stronghold: function(p) { return strongholdIds.has(p.sourceId) || strongholdIds.has(p.targetId); },
-    threat:     function(p) { return p.isCircular || p.edgeType === "temporal" || p.isViolation; }
-  };
-
-  var viewLocFilters = {
-    kingdom: function() { return true; },
-    trade: function(loc) {
-      return tradeHubIds.has(loc.id);
-    },
-    stronghold: function(loc) {
-      return strongholdIds.has(loc.id);
-    },
-    threat: function(loc) {
-      return loc.isCircular || loc.isOrphan || loc.isGodModule || loc.isBridge || loc.isHotspot ||
-        (loc.threats && loc.threats.length > 0);
-    }
-  };
-
-  function setView(view) {
-    currentView = view;
+  function setLens(lens) {
+    currentLens = lens;
     document.querySelectorAll(".tab").forEach(function(t) {
-      t.classList.toggle("active", t.getAttribute("data-view") === view);
+      t.classList.toggle("active", t.getAttribute("data-lens") === lens);
     });
+    buildLensLegend();
     dirty = true;
   }
 
   document.querySelectorAll(".tab").forEach(function(tab) {
     tab.addEventListener("click", function() {
-      setView(tab.getAttribute("data-view"));
+      setLens(tab.getAttribute("data-lens"));
     });
   });
+
+  // Build initial legend
+  buildLensLegend();
 
   // === EDGE TYPE TOGGLES ===
   document.querySelectorAll("[data-toggle]").forEach(function(btn) {
@@ -1861,6 +2082,111 @@ canvas#minimap {
     addField(panel, "Importance", loc.importance.toFixed(1));
     addField(panel, "File", loc.filePath);
 
+    // Kingdom Intel section
+    (function() {
+      var hasComplexity = loc.complexity > 0;
+      var hasChurn = loc.changeCount > 0;
+      if (!hasComplexity && !hasChurn) return; // nothing to show
+
+      // Compute max values across all locations for relative bars
+      var maxComplexity = 1, maxChangeCount = 1, maxDensity = 0.01;
+      for (var mi = 0; mi < locations.length; mi++) {
+        var ml = locations[mi];
+        if (ml.complexity > maxComplexity) maxComplexity = ml.complexity;
+        if (ml.changeCount > maxChangeCount) maxChangeCount = ml.changeCount;
+        var md = ml.loc > 0 ? ml.complexity / ml.loc : 0;
+        if (md > maxDensity) maxDensity = md;
+      }
+
+      var sec = document.createElement("div");
+      sec.className = "intel-section";
+      var h = document.createElement("h3");
+      h.textContent = "Kingdom Intel";
+      sec.appendChild(h);
+
+      function barColor(pct) {
+        if (pct < 0.25) return "#3fb950";
+        if (pct < 0.5) return "#d4a017";
+        if (pct < 0.75) return "#e08830";
+        return "#cc3333";
+      }
+
+      function addBar(label, value, maxVal, desc) {
+        var pct = maxVal > 0 ? Math.min(value / maxVal, 1) : 0;
+        var row = document.createElement("div");
+        row.className = "intel-row";
+        var lbl = document.createElement("span");
+        lbl.className = "intel-label";
+        lbl.textContent = label;
+        var bgDiv = document.createElement("div");
+        bgDiv.className = "intel-bar-bg";
+        var fill = document.createElement("div");
+        fill.className = "intel-bar-fill";
+        fill.style.width = (pct * 100).toFixed(0) + "%";
+        fill.style.background = barColor(pct);
+        bgDiv.appendChild(fill);
+        var valSpan = document.createElement("span");
+        valSpan.className = "intel-value";
+        valSpan.textContent = desc;
+        row.appendChild(lbl);
+        row.appendChild(bgDiv);
+        row.appendChild(valSpan);
+        sec.appendChild(row);
+      }
+
+      if (hasComplexity) {
+        addBar("Complexity", loc.complexity, maxComplexity, loc.complexity + " branches");
+        var density = loc.loc > 0 ? loc.complexity / loc.loc : 0;
+        addBar("Density", density, maxDensity, density.toFixed(3) + " per line");
+      }
+      if (hasChurn) {
+        addBar("Churn", loc.changeCount, maxChangeCount, loc.changeCount + " changes");
+      }
+      if (hasComplexity && hasChurn) {
+        addBar("Hotspot", loc.hotspotScore, 1, loc.hotspotScore.toFixed(2));
+      }
+
+      // Verdict
+      var highComplexity = loc.normalizedComplexity >= 0.5;
+      var highChurn = loc.changeFrequency >= 0.5;
+      var verdict = "";
+      if (hasComplexity && hasChurn) {
+        if (highComplexity && highChurn) {
+          verdict = "Frequently changed complex code \u2014 strongest refactoring candidate. Break into smaller modules.";
+        } else if (highComplexity && !highChurn) {
+          verdict = "Complex but stable \u2014 lower risk. Consider refactoring if you need to modify it.";
+        } else if (!highComplexity && highChurn) {
+          verdict = "Simple code, changes often \u2014 healthy active development.";
+        } else {
+          verdict = "Simple and stable \u2014 no action needed.";
+        }
+      } else if (hasComplexity && !hasChurn) {
+        if (highComplexity) {
+          verdict = "Complex code with no churn data \u2014 review if this file is hard to maintain.";
+        }
+      }
+
+      // Dependency verdicts
+      if (loc.isGodModule) {
+        verdict += (verdict ? " " : "") + "This file imports " + loc.fanOut + " modules \u2014 consider splitting responsibilities.";
+      }
+      if (loc.fanIn >= 8) {
+        verdict += (verdict ? " " : "") + loc.fanIn + " files depend on this \u2014 changes here have wide blast radius.";
+      }
+      if (loc.isOrphan) {
+        verdict += (verdict ? " " : "") + "No imports or exports \u2014 verify this file is still needed.";
+      }
+
+      if (verdict) {
+        var vDiv = document.createElement("div");
+        vDiv.className = "intel-verdict";
+        vDiv.textContent = verdict;
+        sec.appendChild(vDiv);
+      }
+
+      panel.appendChild(sec);
+    })();
+
     // Threats
     var threatNames = {
       "circular-dependency": "Cursed! (Circular Dependency)",
@@ -1998,7 +2324,8 @@ canvas#minimap {
       var x = loc.gridX * TILE * scale;
       var y = loc.gridY * TILE * scale;
       var s = Math.max(2, loc.tileSize * TILE * scale);
-      mmCtx.fillStyle = loc.isCircular ? CURSED_COLOR : loc.colorMain;
+      var mlc = getLensColors(loc);
+      mmCtx.fillStyle = loc.isCircular && currentLens === "kingdom" ? CURSED_COLOR : mlc.main;
       mmCtx.globalAlpha = loc.isOrphan ? 0.4 : 1;
       mmCtx.fillRect(x, y, s, s);
       mmCtx.globalAlpha = 1;
@@ -2190,8 +2517,7 @@ canvas#minimap {
     ctx.fillStyle = "#1a1a2e";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    var locFilter = viewLocFilters[currentView] || viewLocFilters.kingdom;
-    var pathFilter = viewFilters[currentView] || viewFilters.kingdom;
+    var pathFilter = lensPathFilters[currentLens] || lensPathFilters.kingdom;
 
     // Visible tile range (culling)
     var tlW = screenToWorld(0, 0);
@@ -2222,7 +2548,7 @@ canvas#minimap {
       return pathFilter(p) && visibleEdgeTypes[getPathRouteType(p)];
     });
 
-    if (currentView === "threat") {
+    if (currentLens === "threats") {
       filteredPaths = paths.filter(function(p) { return p.isCircular || p.edgeType === "temporal" || p.isViolation; });
     }
 
@@ -2330,7 +2656,7 @@ canvas#minimap {
         var spath = selectedPaths[sp];
         if (spath.points.length < 2) continue;
         if (!visibleEdgeTypes[getPathRouteType(spath)]) continue;
-        if (currentView !== "kingdom" && !(viewFilters[currentView] || viewFilters.kingdom)(spath)) continue;
+        if (currentLens !== "kingdom" && !(lensPathFilters[currentLens] || lensPathFilters.kingdom)(spath)) continue;
 
         var isOutgoing = spath.sourceId === selectedLoc.id;
         var particleColor = getPathColors(spath).glow;
@@ -2395,9 +2721,9 @@ canvas#minimap {
     // Draw locations
     for (var li = 0; li < locations.length; li++) {
       var loc = locations[li];
-      var matches = locFilter(loc);
-      if (!matches && currentView !== "kingdom") {
-        ctx.globalAlpha = 0.2;
+      var lensAlpha = getLensAlpha(loc);
+      if (lensAlpha < 1 && !selectedLoc) {
+        ctx.globalAlpha = lensAlpha;
       } else if (selectedLoc) {
         if (loc.id === selectedLoc.id) {
           ctx.globalAlpha = 1;

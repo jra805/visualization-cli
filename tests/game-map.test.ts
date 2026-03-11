@@ -301,10 +301,11 @@ describe("game-map", () => {
       expect(html).toContain("</html>");
       expect(html).toContain("game-data");
       expect(html).toContain("REALM MAP");
-      expect(html).toContain("Kingdom Overview");
-      expect(html).toContain("Trade Routes");
-      expect(html).toContain("Strongholds");
-      expect(html).toContain("Threat Map");
+      expect(html).toContain("Kingdom");
+      expect(html).toContain("Dependencies");
+      expect(html).toContain("Complexity");
+      expect(html).toContain("Hotspots");
+      expect(html).toContain("Threats");
     });
 
     it("contains no external script or stylesheet references", () => {
@@ -410,7 +411,6 @@ describe("game-map", () => {
 
       expect(html).toContain("VIOLATION_COLOR");
       expect(html).toContain("isViolation");
-      expect(html).toContain("Violation (Smuggler)");
     });
 
     it("contains threat severity filter buttons", () => {
