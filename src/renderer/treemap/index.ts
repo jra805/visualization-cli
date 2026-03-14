@@ -13,6 +13,8 @@ export interface TreemapNode {
   complexity?: number;
   hotspotScore?: number;
   isHotspot?: boolean;
+  fanIn?: number;
+  fanOut?: number;
   rect: TreemapRect;
   children?: TreemapNode[];
 }
@@ -30,10 +32,31 @@ export function buildTreemapData(
   graph: Graph,
   report: ArchReport,
   width: number = 1200,
-  height: number = 800
+  height: number = 800,
 ): TreemapData {
+  // Compute fanIn/fanOut from edges
+  const fanInMap = new Map<string, number>();
+  const fanOutMap = new Map<string, number>();
+  for (const edge of graph.edges) {
+    if (edge.type !== "import") continue;
+    fanOutMap.set(edge.source, (fanOutMap.get(edge.source) ?? 0) + 1);
+    fanInMap.set(edge.target, (fanInMap.get(edge.target) ?? 0) + 1);
+  }
+
   // Group nodes by directory
-  const dirMap = new Map<string, { id: string; label: string; moduleType: string; language?: string; loc: number; complexity?: number; hotspotScore?: number; isHotspot?: boolean }[]>();
+  const dirMap = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      moduleType: string;
+      language?: string;
+      loc: number;
+      complexity?: number;
+      hotspotScore?: number;
+      isHotspot?: boolean;
+    }[]
+  >();
 
   for (const [id, node] of graph.nodes) {
     const dir = node.directory || "(root)";
@@ -53,7 +76,11 @@ export function buildTreemapData(
   }
 
   // Build directory-level items for top-level squarify
-  const dirItems: { id: string; value: number; files: typeof dirMap extends Map<string, infer V> ? V : never }[] = [];
+  const dirItems: {
+    id: string;
+    value: number;
+    files: typeof dirMap extends Map<string, infer V> ? V : never;
+  }[] = [];
   for (const [dir, files] of dirMap) {
     const totalLoc = files.reduce((sum, f) => sum + f.loc, 0);
     dirItems.push({ id: dir, value: totalLoc, files });
@@ -84,6 +111,8 @@ export function buildTreemapData(
         complexity: fileData.complexity,
         hotspotScore: fileData.hotspotScore,
         isHotspot: fileData.isHotspot,
+        fanIn: fanInMap.get(fr.id) ?? 0,
+        fanOut: fanOutMap.get(fr.id) ?? 0,
         rect: fr.rect,
       };
     });
@@ -119,10 +148,7 @@ export function buildTreemapData(
 /**
  * Generate treemap HTML visualization.
  */
-export function generateTreemapHtml(
-  graph: Graph,
-  report: ArchReport
-): string {
+export function generateTreemapHtml(graph: Graph, report: ArchReport): string {
   const data = buildTreemapData(graph, report);
   return generateTreemapTemplate(data);
 }

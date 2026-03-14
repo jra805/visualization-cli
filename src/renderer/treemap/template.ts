@@ -1,4 +1,5 @@
 import type { TreemapData, TreemapNode } from "./index.js";
+import { MODULE_COLORS, LANG_COLORS } from "../shared-colors.js";
 
 export function generateTreemapTemplate(data: TreemapData): string {
   const jsonData = JSON.stringify(data).replace(/<\//g, "<\\/");
@@ -177,20 +178,9 @@ export function generateTreemapTemplate(data: TreemapData): string {
   var breadcrumbsEl = document.getElementById('breadcrumbs');
   var legendEl = document.getElementById('legend');
 
-  var MODULE_COLORS = {
-    component: '#5B8DD9', hook: '#4CAF7D', util: '#8E99A4', page: '#9B6BB0',
-    'api-route': '#D4854A', store: '#CF5C5C', context: '#45B5AA', type: '#A0A8B0',
-    layout: '#9B6BB0', test: '#8E99A4', service: '#CF8C5C', controller: '#D4854A',
-    middleware: '#C8A832', config: '#8E99A4', model: '#7A8A9A', unknown: '#6B7280',
-    handler: '#D4854A', schema: '#88AACC', repository: '#7A8A9A', 'entry-point': '#8E99A4',
-    directory: '#30363d'
-  };
+  var MODULE_COLORS = ${JSON.stringify(MODULE_COLORS)};
 
-  var LANG_COLORS = {
-    javascript: '#f7df1e', typescript: '#3178c6', python: '#3776ab', go: '#00add8',
-    java: '#b07219', kotlin: '#A97BFF', rust: '#dea584', csharp: '#68217a',
-    php: '#4F5D95', ruby: '#CC342D'
-  };
+  var LANG_COLORS = ${JSON.stringify(LANG_COLORS)};
 
   var colorMode = 'language';
   var currentNode = data.root;
@@ -399,6 +389,13 @@ export function generateTreemapTemplate(data: TreemapData): string {
             ctx.strokeRect(fr.x + 1, fr.y + 1, fr.w - 2, fr.h - 2);
           }
 
+          // High coupling border
+          if ((file.fanIn || 0) + (file.fanOut || 0) > 8) {
+            ctx.strokeStyle = '#58a6ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(fr.x + 1, fr.y + 1, fr.w - 2, fr.h - 2);
+          }
+
           // File label (only if rect is large enough)
           if (fr.w > 30 && fr.h > 14) {
             ctx.fillStyle = '#0d1117';
@@ -448,6 +445,7 @@ export function generateTreemapTemplate(data: TreemapData): string {
       ttHtml += '<div class="tt-row">Type: <span class="tt-value">' + esc(hoveredNode.moduleType) + '</span></div>';
       ttHtml += '<div class="tt-row">LOC: <span class="tt-value">' + hoveredNode.loc + '</span></div>';
       if (hoveredNode.language) ttHtml += '<div class="tt-row">Language: <span class="tt-value">' + esc(hoveredNode.language) + '</span></div>';
+      if (hoveredNode.fanIn != null || hoveredNode.fanOut != null) ttHtml += '<div class="tt-row">Imports: <span class="tt-value">' + (hoveredNode.fanOut || 0) + '</span> | Imported by: <span class="tt-value">' + (hoveredNode.fanIn || 0) + '</span></div>';
       if (hoveredNode.complexity) ttHtml += '<div class="tt-row">Complexity: <span class="tt-value">' + hoveredNode.complexity + ' branches</span></div>';
       if (hoveredNode.hotspotScore) ttHtml += '<div class="tt-row">Hotspot: <span class="tt-value" style="color:#F97316">' + hoveredNode.hotspotScore.toFixed(2) + '</span></div>';
       tooltip.innerHTML = ttHtml;

@@ -8,6 +8,7 @@ import { render } from "../renderer/index.js";
 
 import type { OutputFormat } from "../renderer/types.js";
 import { applyGrouping } from "../graph/auto-grouper.js";
+import { disambiguateLabels } from "../utils/paths.js";
 
 export interface AnalyzeOptions {
   output: string;
@@ -72,6 +73,9 @@ export async function analyzeCommand(
     }
     process.exit(1);
   }
+
+  // Disambiguate duplicate labels (e.g., multiple "page" or "route" files)
+  disambiguateLabels(parseResult.graph.nodes);
 
   // Step 3: Analyze
   const analyzeSpinner = ora("Analyzing architecture...").start();

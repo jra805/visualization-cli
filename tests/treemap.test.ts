@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { squarify, type TreemapRect } from "../src/renderer/treemap/layout.js";
-import { buildTreemapData, generateTreemapHtml } from "../src/renderer/treemap/index.js";
+import {
+  buildTreemapData,
+  generateTreemapHtml,
+} from "../src/renderer/treemap/index.js";
 import type { Graph, GraphNode } from "../src/graph/types.js";
 import type { ArchReport } from "../src/analyzer/types.js";
 
@@ -104,9 +107,33 @@ describe("squarify", () => {
 describe("buildTreemapData", () => {
   function makeGraph(): Graph {
     const nodes = new Map<string, GraphNode>();
-    nodes.set("/p/src/a.ts", { id: "/p/src/a.ts", filePath: "/p/src/a.ts", label: "a", moduleType: "component", loc: 100, directory: "src", language: "typescript" as any });
-    nodes.set("/p/src/b.ts", { id: "/p/src/b.ts", filePath: "/p/src/b.ts", label: "b", moduleType: "util", loc: 50, directory: "src", language: "typescript" as any });
-    nodes.set("/p/lib/c.py", { id: "/p/lib/c.py", filePath: "/p/lib/c.py", label: "c", moduleType: "service", loc: 80, directory: "lib", language: "python" as any });
+    nodes.set("/p/src/a.ts", {
+      id: "/p/src/a.ts",
+      filePath: "/p/src/a.ts",
+      label: "a",
+      moduleType: "component",
+      loc: 100,
+      directory: "src",
+      language: "typescript" as any,
+    });
+    nodes.set("/p/src/b.ts", {
+      id: "/p/src/b.ts",
+      filePath: "/p/src/b.ts",
+      label: "b",
+      moduleType: "util",
+      loc: 50,
+      directory: "src",
+      language: "typescript" as any,
+    });
+    nodes.set("/p/lib/c.py", {
+      id: "/p/lib/c.py",
+      filePath: "/p/lib/c.py",
+      label: "c",
+      moduleType: "service",
+      loc: 80,
+      directory: "lib",
+      language: "python" as any,
+    });
     return { nodes, edges: [] };
   }
 
@@ -142,16 +169,84 @@ describe("buildTreemapData", () => {
   });
 });
 
+describe("treemap coupling info", () => {
+  it("includes fanIn/fanOut in treemap node data", () => {
+    const nodes = new Map<string, GraphNode>();
+    nodes.set("/p/src/a.ts", {
+      id: "/p/src/a.ts",
+      filePath: "/p/src/a.ts",
+      label: "a",
+      moduleType: "component",
+      loc: 100,
+      directory: "src",
+    });
+    nodes.set("/p/src/b.ts", {
+      id: "/p/src/b.ts",
+      filePath: "/p/src/b.ts",
+      label: "b",
+      moduleType: "util",
+      loc: 50,
+      directory: "src",
+    });
+    nodes.set("/p/src/c.ts", {
+      id: "/p/src/c.ts",
+      filePath: "/p/src/c.ts",
+      label: "c",
+      moduleType: "service",
+      loc: 80,
+      directory: "src",
+    });
+    const graph: Graph = {
+      nodes,
+      edges: [
+        { source: "/p/src/a.ts", target: "/p/src/b.ts", type: "import" },
+        { source: "/p/src/c.ts", target: "/p/src/b.ts", type: "import" },
+        { source: "/p/src/a.ts", target: "/p/src/c.ts", type: "import" },
+      ],
+    };
+
+    const data = buildTreemapData(graph, {
+      totalModules: 3,
+      totalEdges: 3,
+      issues: [],
+      circularDeps: [],
+      orphans: [],
+      topCoupled: [],
+    });
+
+    const srcDir = data.root.children!.find((c) => c.id === "src")!;
+    const nodeA = srcDir.children!.find((c) => c.id === "/p/src/a.ts")!;
+    const nodeB = srcDir.children!.find((c) => c.id === "/p/src/b.ts")!;
+
+    expect(nodeA.fanOut).toBe(2); // a imports b and c
+    expect(nodeA.fanIn).toBe(0);
+    expect(nodeB.fanIn).toBe(2); // b is imported by a and c
+    expect(nodeB.fanOut).toBe(0);
+  });
+});
+
 describe("generateTreemapHtml", () => {
   function makeGraph(): Graph {
     const nodes = new Map<string, GraphNode>();
-    nodes.set("/p/a.ts", { id: "/p/a.ts", filePath: "/p/a.ts", label: "a", moduleType: "component", loc: 100, directory: "src" });
+    nodes.set("/p/a.ts", {
+      id: "/p/a.ts",
+      filePath: "/p/a.ts",
+      label: "a",
+      moduleType: "component",
+      loc: 100,
+      directory: "src",
+    });
     return { nodes, edges: [] };
   }
 
   it("generates valid HTML with treemap data", () => {
     const html = generateTreemapHtml(makeGraph(), {
-      totalModules: 1, totalEdges: 0, issues: [], circularDeps: [], orphans: [], topCoupled: [],
+      totalModules: 1,
+      totalEdges: 0,
+      issues: [],
+      circularDeps: [],
+      orphans: [],
+      topCoupled: [],
     });
 
     expect(html).toContain("<!DOCTYPE html>");

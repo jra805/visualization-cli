@@ -48,11 +48,15 @@ describe("module-classifier", () => {
     });
 
     it("classifies migration files", () => {
-      expect(classifyModule("database/migrations/001_create_users.php")).toBe("migration");
+      expect(classifyModule("database/migrations/001_create_users.php")).toBe(
+        "migration",
+      );
     });
 
     it("classifies request files as validator", () => {
-      expect(classifyModule("app/Requests/StoreUserRequest.php")).toBe("validator");
+      expect(classifyModule("app/Requests/StoreUserRequest.php")).toBe(
+        "validator",
+      );
     });
   });
 
@@ -70,11 +74,39 @@ describe("module-classifier", () => {
     });
 
     it("classifies serializer files", () => {
-      expect(classifyModule("app/serializers/user_serializer.rb")).toBe("serializer");
+      expect(classifyModule("app/serializers/user_serializer.rb")).toBe(
+        "serializer",
+      );
     });
 
     it("classifies validator files", () => {
-      expect(classifyModule("app/validators/email_validator.rb")).toBe("validator");
+      expect(classifyModule("app/validators/email_validator.rb")).toBe(
+        "validator",
+      );
+    });
+  });
+
+  describe("schema and database directory patterns", () => {
+    it("classifies /schemas/ directory as schema", () => {
+      expect(classifyModule("src/schemas/user.ts")).toBe("schema");
+    });
+
+    it("classifies /schema/ directory as schema", () => {
+      expect(classifyModule("src/schema/order.ts")).toBe("schema");
+    });
+
+    it("classifies /db/ directory as repository", () => {
+      expect(classifyModule("src/db/connection.ts")).toBe("repository");
+    });
+
+    it("classifies /database/ directory as repository", () => {
+      expect(classifyModule("src/database/queries.ts")).toBe("repository");
+    });
+
+    it("migration rule takes precedence over db directory", () => {
+      expect(classifyModule("database/migrations/001_create.php")).toBe(
+        "migration",
+      );
     });
   });
 

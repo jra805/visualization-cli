@@ -2,12 +2,13 @@ import type { Graph } from "../graph/types.js";
 import type { ArchReport } from "../analyzer/types.js";
 import type { ComponentInfo, ComponentDataFlow } from "../parser/types.js";
 import { serializeGraph } from "./serialize.js";
+import { MODULE_COLORS, LANG_COLORS } from "./shared-colors.js";
 
 export function generateInteractiveHtml(
   graph: Graph,
   report: ArchReport,
   components: ComponentInfo[],
-  dataFlows: ComponentDataFlow[]
+  dataFlows: ComponentDataFlow[],
 ): string {
   const data = serializeGraph(graph, report, components, dataFlows);
   // Escape </ sequences to prevent premature script tag closure when embedded in HTML
@@ -360,9 +361,9 @@ export function generateInteractiveHtml(
   <div class="stats">
     <span class="chip">${data.report.totalModules} modules</span>
     <span class="chip">${data.report.totalEdges} edges</span>
-    <span class="chip ${data.report.issues.length > 0 ? 'error' : 'ok'}">${data.report.issues.length} issues</span>
+    <span class="chip ${data.report.issues.length > 0 ? "error" : "ok"}">${data.report.issues.length} issues</span>
     <span class="chip">${components.length} components</span>
-    ${data.report.architecturePattern && data.report.architecturePattern !== 'unknown' ? `<span class="chip">${data.report.architecturePattern}</span>` : ''}
+    ${data.report.architecturePattern && data.report.architecturePattern !== "unknown" ? `<span class="chip">${data.report.architecturePattern}</span>` : ""}
   </div>
   <input class="search-box" type="text" placeholder="Search modules..." id="search">
 </div>
@@ -513,16 +514,16 @@ export function generateInteractiveHtml(
           'text-background-shape': 'roundrectangle'
         }
       },
-      { selector: 'node.component', style: { 'background-color': '#5B8DD9', 'border-color': '#5B8DD9' } },
-      { selector: 'node.hook', style: { 'background-color': '#4CAF7D', 'border-color': '#4CAF7D' } },
-      { selector: 'node.util', style: { 'background-color': '#8E99A4', 'border-color': '#8E99A4' } },
-      { selector: 'node.page', style: { 'background-color': '#9B6BB0', 'border-color': '#9B6BB0' } },
-      { selector: 'node.api-route', style: { 'background-color': '#D4854A', 'border-color': '#D4854A' } },
-      { selector: 'node.store', style: { 'background-color': '#CF5C5C', 'border-color': '#CF5C5C' } },
-      { selector: 'node.context', style: { 'background-color': '#45B5AA', 'border-color': '#45B5AA' } },
-      { selector: 'node.type', style: { 'background-color': '#A0A8B0', 'border-color': '#A0A8B0' } },
-      { selector: 'node.layout', style: { 'background-color': '#9B6BB0', 'border-color': '#9B6BB0' } },
-      { selector: 'node.test', style: { 'background-color': '#8E99A4', 'border-color': '#8E99A4' } },
+      { selector: 'node.component', style: { 'background-color': '${MODULE_COLORS.component}', 'border-color': '${MODULE_COLORS.component}' } },
+      { selector: 'node.hook', style: { 'background-color': '${MODULE_COLORS.hook}', 'border-color': '${MODULE_COLORS.hook}' } },
+      { selector: 'node.util', style: { 'background-color': '${MODULE_COLORS.util}', 'border-color': '${MODULE_COLORS.util}' } },
+      { selector: 'node.page', style: { 'background-color': '${MODULE_COLORS.page}', 'border-color': '${MODULE_COLORS.page}' } },
+      { selector: 'node.api-route', style: { 'background-color': '${MODULE_COLORS["api-route"]}', 'border-color': '${MODULE_COLORS["api-route"]}' } },
+      { selector: 'node.store', style: { 'background-color': '${MODULE_COLORS.store}', 'border-color': '${MODULE_COLORS.store}' } },
+      { selector: 'node.context', style: { 'background-color': '${MODULE_COLORS.context}', 'border-color': '${MODULE_COLORS.context}' } },
+      { selector: 'node.type', style: { 'background-color': '${MODULE_COLORS.type}', 'border-color': '${MODULE_COLORS.type}' } },
+      { selector: 'node.layout', style: { 'background-color': '${MODULE_COLORS.layout}', 'border-color': '${MODULE_COLORS.layout}' } },
+      { selector: 'node.test', style: { 'background-color': '${MODULE_COLORS.test}', 'border-color': '${MODULE_COLORS.test}' } },
       {
         selector: 'node.compound-group',
         style: {
@@ -955,23 +956,9 @@ export function generateInteractiveHtml(
   });
 
   // --- Lens system ---
-  var MODULE_TYPE_COLORS = {
-    component: '#5B8DD9', hook: '#4CAF7D', util: '#8E99A4', page: '#9B6BB0',
-    'api-route': '#D4854A', store: '#CF5C5C', context: '#45B5AA', type: '#A0A8B0',
-    layout: '#9B6BB0', test: '#8E99A4', service: '#CF8C5C', controller: '#D4854A',
-    middleware: '#C8A832', config: '#8E99A4', model: '#7A8A9A', unknown: '#6B7280',
-    handler: '#D4854A', schema: '#88AACC', repository: '#7A8A9A', 'entry-point': '#8E99A4',
-    'route-config': '#D07028', guard: '#C88828', interceptor: '#C89838', validator: '#A0A8B0',
-    composable: '#4CAF7D', directive: '#5878D0', view: '#5B8DD9', template: '#5B8DD9',
-    entity: '#7A8A9A', dto: '#A0A8B0', migration: '#8E99A4', decorator: '#9B6BB0',
-    serializer: '#8E99A4'
-  };
+  var MODULE_TYPE_COLORS = ${JSON.stringify(MODULE_COLORS)};
 
-  var LANG_COLORS = {
-    javascript: '#f7df1e', typescript: '#3178c6', python: '#3776ab', go: '#00add8',
-    java: '#b07219', kotlin: '#A97BFF', rust: '#dea584', csharp: '#68217a',
-    php: '#4F5D95', ruby: '#CC342D'
-  };
+  var LANG_COLORS = ${JSON.stringify(LANG_COLORS)};
 
   var currentLens = 'dependencies';
   var lensBtns = document.querySelectorAll('.lens-btn');

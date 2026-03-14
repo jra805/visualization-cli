@@ -1,22 +1,12 @@
 import type { Graph } from "../../graph/types.js";
 import type { ArchReport } from "../../analyzer/types.js";
 import type { GroupedGraph } from "../../graph/grouping.js";
+import { MODULE_COLORS } from "../shared-colors.js";
 
-const MODULE_COLORS: Record<string, string> = {
-  component: "#4A90D9",
-  hook: "#27AE60",
-  util: "#95A5A6",
-  page: "#8E44AD",
-  "api-route": "#E67E22",
-  store: "#E74C3C",
-  layout: "#9B59B6",
-  context: "#1ABC9C",
-  type: "#BDC3C7",
-  test: "#7F8C8D",
-  unknown: "#CCCCCC",
-};
-
-export function renderDependencyGraph(graph: Graph, report: ArchReport): string {
+export function renderDependencyGraph(
+  graph: Graph,
+  report: ArchReport,
+): string {
   const lines: string[] = ["flowchart LR"];
 
   // Collect circular dep edges for highlighting
@@ -30,9 +20,7 @@ export function renderDependencyGraph(graph: Graph, report: ArchReport): string 
 
   // High coupling nodes
   const highCouplingNodes = new Set(
-    report.topCoupled
-      .filter((c) => c.fanIn + c.fanOut > 10)
-      .map((c) => c.file)
+    report.topCoupled.filter((c) => c.fanIn + c.fanOut > 10).map((c) => c.file),
   );
 
   // Check for grouping
@@ -55,6 +43,30 @@ export function renderDependencyGraph(graph: Graph, report: ArchReport): string 
       lines.push(`  end`);
     }
     lines.push("");
+  } else if (graph.nodes.size > 20) {
+    // Auto-group by top-level directory when no explicit grouping and many nodes
+    const dirGroups = new Map<string, string[]>();
+    for (const [id, node] of graph.nodes) {
+      const dir = node.directory || "(root)";
+      const topDir = dir.split("/")[0] || dir;
+      const list = dirGroups.get(topDir) ?? [];
+      list.push(id);
+      dirGroups.set(topDir, list);
+    }
+
+    for (const [dir, ids] of dirGroups) {
+      if (ids.length >= 2) {
+        const safeDir = sanitizeId(dir);
+        lines.push(`  subgraph ${safeDir}["${dir}"]`);
+        for (const id of ids) {
+          const node = graph.nodes.get(id)!;
+          lines.push(`    ${sanitizeId(id)}["${node.label}"]`);
+          groupedNodeIds.add(id);
+        }
+        lines.push(`  end`);
+      }
+    }
+    if (groupedNodeIds.size > 0) lines.push("");
   }
 
   // Add ungrouped nodes

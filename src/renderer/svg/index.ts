@@ -1,6 +1,10 @@
 import type { Graph } from "../../graph/types.js";
 import type { ArchReport } from "../../analyzer/types.js";
-import { packCircles, boundingCircle } from "./circle-packing.js";
+import {
+  packCircles,
+  boundingCircle,
+  packHierarchical,
+} from "./circle-packing.js";
 import { buildSvg, type SvgCircleData } from "./svg-builder.js";
 
 /**
@@ -9,7 +13,11 @@ import { buildSvg, type SvgCircleData } from "./svg-builder.js";
 export function generateSvg(
   graph: Graph,
   report: ArchReport,
-  options: { width?: number; height?: number; colorBy?: "type" | "language" } = {}
+  options: {
+    width?: number;
+    height?: number;
+    colorBy?: "type" | "language";
+  } = {},
 ): string {
   // Build pack input from graph nodes
   const items = Array.from(graph.nodes.values()).map((node) => ({
@@ -17,8 +25,37 @@ export function generateSvg(
     value: Math.max(node.loc, 1),
   }));
 
-  // Pack circles
-  const packed = packCircles(items);
+  // Determine unique directories
+  const dirs = new Set<string>();
+  for (const node of graph.nodes.values()) {
+    dirs.add(node.directory || "(root)");
+  }
+
+  // Use hierarchical packing when multiple directories exist
+  const useHierarchical = dirs.size > 1;
+  let packed: ReturnType<typeof packCircles>;
+  let groupCircles: {
+    id: string;
+    label: string;
+    x: number;
+    y: number;
+    r: number;
+  }[] = [];
+
+  if (useHierarchical) {
+    const dirLookup = new Map<string, string>();
+    for (const node of graph.nodes.values()) {
+      dirLookup.set(node.id, node.directory || "(root)");
+    }
+    const result = packHierarchical(
+      items,
+      (id) => dirLookup.get(id) ?? "(root)",
+    );
+    packed = result.leaves;
+    groupCircles = result.groups;
+  } else {
+    packed = packCircles(items);
+  }
 
   // Enrich with metadata
   const circleData: SvgCircleData[] = packed.map((pc) => {
@@ -37,8 +74,16 @@ export function generateSvg(
     };
   });
 
-  // Compute bounding circle
-  const bounds = boundingCircle(packed);
+  // Compute bounding circle (include group circles in bounds)
+  const allCirclesForBounds = [
+    ...packed,
+    ...groupCircles.map((g) => ({ id: g.id, x: g.x, y: g.y, r: g.r })),
+  ];
+  const bounds = boundingCircle(allCirclesForBounds);
 
-  return buildSvg(circleData, bounds, options);
+  return buildSvg(circleData, bounds, {
+    ...options,
+    edges: graph.edges,
+    groups: groupCircles,
+  });
 }
