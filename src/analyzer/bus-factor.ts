@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
 import type { Graph } from "../graph/types.js";
+import { normalizePath } from "../utils/paths.js";
 
 export interface BusFactorData {
   file: string;
@@ -41,7 +42,7 @@ export function detectBusFactors(
     if (trimmed.includes("|||")) {
       currentAuthor = trimmed.split("|||")[0];
     } else if (currentAuthor) {
-      const absPath = path.resolve(rootDir, trimmed);
+      const absPath = normalizePath(path.resolve(rootDir, trimmed));
       if (!fileAuthors.has(absPath)) {
         fileAuthors.set(absPath, new Map());
       }
@@ -52,7 +53,7 @@ export function detectBusFactors(
 
   // Compute bus factor for files in the graph
   for (const [nodeId] of graph.nodes) {
-    const authorMap = fileAuthors.get(nodeId);
+    const authorMap = fileAuthors.get(normalizePath(nodeId));
     if (!authorMap || authorMap.size === 0) continue;
 
     const totalCommits = [...authorMap.values()].reduce((a, b) => a + b, 0);

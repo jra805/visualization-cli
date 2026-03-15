@@ -16,7 +16,10 @@ export class JavaScriptParser implements LanguageParser {
   language = "javascript" as const;
   extensions = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
 
-  async parseImports(files: string[], rootDir: string): Promise<ParsedDependencies> {
+  async parseImports(
+    files: string[],
+    rootDir: string,
+  ): Promise<ParsedDependencies> {
     const nodes: GraphNode[] = [];
     const edges: Edge[] = [];
 
@@ -68,8 +71,8 @@ export class JavaScriptParser implements LanguageParser {
 // ── Path Alias Resolution ──
 
 interface PathAlias {
-  prefix: string;       // e.g. "@/" from "@/*"
-  targets: string[];    // e.g. ["src/"] from ["./src/*"]
+  prefix: string; // e.g. "@/" from "@/*"
+  targets: string[]; // e.g. ["src/"] from ["./src/*"]
 }
 
 interface AliasResolver {
@@ -89,7 +92,7 @@ function loadPathAliases(rootDir: string): AliasResolver {
     try {
       let raw = fs.readFileSync(configPath, "utf-8");
       // Strip BOM
-      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+      if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
       const config = parseJsonWithComments(raw);
 
       const compilerOptions = config.compilerOptions ?? {};
@@ -102,7 +105,7 @@ function loadPathAliases(rootDir: string): AliasResolver {
           const extPath = path.resolve(rootDir, config.extends);
           if (fs.existsSync(extPath)) {
             let extRaw = fs.readFileSync(extPath, "utf-8");
-            if (extRaw.charCodeAt(0) === 0xFEFF) extRaw = extRaw.slice(1);
+            if (extRaw.charCodeAt(0) === 0xfeff) extRaw = extRaw.slice(1);
             const extConfig = parseJsonWithComments(extRaw);
             paths = extConfig.compilerOptions?.paths;
             if (!baseUrl) baseUrl = extConfig.compilerOptions?.baseUrl;
@@ -116,8 +119,8 @@ function loadPathAliases(rootDir: string): AliasResolver {
         for (const [pattern, mappings] of Object.entries(paths)) {
           // Convert "@/*" → prefix "@/"
           const prefix = pattern.endsWith("/*")
-            ? pattern.slice(0, -1)    // "@/*" → "@/"
-            : pattern;                // exact match
+            ? pattern.slice(0, -1) // "@/*" → "@/"
+            : pattern; // exact match
 
           const targets = (mappings as string[]).map((m) => {
             // Normalize target: "./src/*" → "src/", "src/*" → "src/"
@@ -212,7 +215,11 @@ function parseJsonWithComments(raw: string): any {
   // Strip trailing commas
   result = result.replace(/,\s*([\]}])/g, "$1");
 
-  return JSON.parse(result);
+  try {
+    return JSON.parse(result);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -223,7 +230,7 @@ function resolveImport(
   importPath: string,
   fromFile: string,
   fileMap: Map<string, string>,
-  aliasResolver: AliasResolver
+  aliasResolver: AliasResolver,
 ): string | undefined {
   // 1. Relative imports (./foo, ../bar)
   if (importPath.startsWith(".")) {
@@ -233,7 +240,10 @@ function resolveImport(
 
   // 2. Path alias resolution (@/foo, ~/bar, etc.)
   for (const alias of aliasResolver.aliases) {
-    if (importPath === alias.prefix.slice(0, -1) || importPath.startsWith(alias.prefix)) {
+    if (
+      importPath === alias.prefix.slice(0, -1) ||
+      importPath.startsWith(alias.prefix)
+    ) {
       const suffix = importPath.startsWith(alias.prefix)
         ? importPath.slice(alias.prefix.length)
         : "";
@@ -248,7 +258,10 @@ function resolveImport(
 
   // 3. baseUrl resolution (e.g. baseUrl: "src" → import "components/Foo" resolves to "src/components/Foo")
   if (aliasResolver.baseUrl) {
-    const base = aliasResolver.baseUrl === "." ? "" : aliasResolver.baseUrl.replace(/\/$/, "") + "/";
+    const base =
+      aliasResolver.baseUrl === "."
+        ? ""
+        : aliasResolver.baseUrl.replace(/\/$/, "") + "/";
     const resolved = base + importPath;
     const found = tryResolveFile(resolved, fileMap);
     if (found) return found;
@@ -279,7 +292,7 @@ function resolveRelative(importPath: string, fromFile: string): string {
  */
 function tryResolveFile(
   resolved: string,
-  fileMap: Map<string, string>
+  fileMap: Map<string, string>,
 ): string | undefined {
   // Exact match
   if (fileMap.has(resolved)) return resolved;
@@ -319,7 +332,8 @@ function extractImports(content: string): string[] {
 
   // import ... from "path"
   // export ... from "path"
-  const staticRe = /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
+  const staticRe =
+    /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
   let m: RegExpExecArray | null;
   while ((m = staticRe.exec(content)) !== null) {
     imports.push(m[1]);

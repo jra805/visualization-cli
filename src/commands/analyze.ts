@@ -125,7 +125,7 @@ export async function analyzeCommand(
     const displayPath = isFilePath
       ? outputDir
       : outputDir +
-        "/" +
+        path.sep +
         (options.format === "mermaid"
           ? "architecture.html"
           : options.format === "game"

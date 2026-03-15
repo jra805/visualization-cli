@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import { analyzeCommand } from "./commands/analyze.js";
 
 const program = new Command();
@@ -16,12 +16,17 @@ program
   .argument("[dir]", "Target project directory to analyze", ".")
   .option("-o, --output <dir>", "Output directory")
   .option("--focus <path>", "Focus analysis on a specific subdirectory")
-  .option("--depth <n>", "Max directory depth to analyze", parseInt)
+  .option("--depth <n>", "Max directory depth to analyze", (val: string) => {
+    const n = parseInt(val, 10);
+    if (isNaN(n) || n < 1)
+      throw new InvalidArgumentError("must be a positive integer");
+    return n;
+  })
   .option("--no-issues", "Skip issue detection, diagrams only")
-  .option(
-    "--format <type>",
-    "Output format: interactive, mermaid, game, treemap, or svg",
-    "interactive",
+  .addOption(
+    new Option("--format <type>", "Output format")
+      .choices(["interactive", "mermaid", "game", "treemap", "svg"])
+      .default("interactive"),
   )
   .option("--group", "Auto-group files by directory and module type")
   .option("--group-config <path>", "Path to JSON group configuration file")
