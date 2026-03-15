@@ -846,7 +846,7 @@ export function generateInteractiveHtml(
       runLayout();
     } else if (view === 'issues') {
       cy.nodes().forEach(function(n) {
-        if (!n.data('isCircular') && !n.data('isOrphan') && !n.data('isGodModule') && !n.data('isHotspot')) {
+        if (!n.data('isCircular') && !n.data('isOrphan') && !n.data('isGodModule') && !n.data('isHotspot') && !n.data('hasSecurityIssue')) {
           n.hide();
         }
       });
@@ -877,6 +877,7 @@ export function generateInteractiveHtml(
     if (nodeData.isOrphan) issues.push('Orphan Module');
     if (nodeData.isGodModule) issues.push('God Module');
     if (nodeData.isHotspot) issues.push('Hotspot');
+    if (nodeData.hasSecurityIssue) issues.push('Security');
     if (issues.length > 0) {
       html += '<div class="field"><div class="field-label">Issues</div><div class="field-value">';
       issues.forEach(function(i) { html += '<span class="tag issue-tag">' + i + '</span>'; });
@@ -1019,6 +1020,7 @@ export function generateInteractiveHtml(
         if (n.data('isHotspot')) n.style({ 'border-color': '#F97316', 'border-width': 3, 'border-style': 'double' });
         if (n.data('isCircular')) n.style({ 'border-color': '#CF5C5C', 'border-width': 3 });
         if (n.data('isGodModule')) n.style({ 'width': 60, 'height': 45, 'border-width': 3 });
+        if (n.data('hasSecurityIssue')) n.style({ 'border-color': '#9B59B6', 'border-width': 3, 'border-style': 'dashed' });
       });
       // Show default legend
       var seenTypes = {};

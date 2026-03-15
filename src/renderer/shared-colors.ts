@@ -59,6 +59,13 @@ export const MODULE_COLORS: Record<string, string> = {
   directory: "#30363d",
 };
 
+export const SECURITY_COLORS = {
+  secret: "#9B59B6",
+  injection: "#8B00FF",
+  xss: "#2ECC71",
+  border: "#9B59B6",
+};
+
 export const LANG_COLORS: Record<string, string> = {
   javascript: "#f7df1e",
   typescript: "#3178c6",

@@ -1522,6 +1522,74 @@ canvas#minimap {
     ctx.fillRect(bx, by + 2, 1, 1);
   }
 
+  // Exposed treasure chest for hardcoded secrets — purple glowing open chest
+  function drawExposedChest(bx, by, bSize) {
+    var cx = bSize - 12, cy = bSize - 10;
+    // Chest body
+    ctx.fillStyle = "#8B4513";
+    ctx.fillRect(bx + cx, by + cy + 3, 10, 6);
+    // Chest lid (open, tilted back)
+    ctx.fillStyle = "#A0522D";
+    ctx.fillRect(bx + cx + 1, by + cy, 8, 3);
+    // Gold lock
+    ctx.fillStyle = "#FFD700";
+    ctx.fillRect(bx + cx + 4, by + cy + 4, 2, 2);
+    // Purple glow (magic leak)
+    ctx.fillStyle = "rgba(155,89,182,0.4)";
+    ctx.fillRect(bx + cx - 1, by + cy - 2, 12, 2);
+    ctx.fillRect(bx + cx + 2, by + cy - 3, 6, 1);
+    // Sparkles
+    ctx.fillStyle = "#D8BFD8";
+    ctx.fillRect(bx + cx + 1, by + cy - 1, 1, 1);
+    ctx.fillRect(bx + cx + 8, by + cy - 2, 1, 1);
+    ctx.fillRect(bx + cx + 5, by + cy - 4, 1, 1);
+  }
+
+  // Dark portal for injection vulnerabilities — swirling purple/black vortex
+  function drawDarkPortal(bx, by, bSize) {
+    var px = -8, py = Math.floor(bSize * 0.3);
+    // Outer ring
+    ctx.fillStyle = "#1a0033";
+    ctx.fillRect(bx + px, by + py, 8, 10);
+    // Inner void
+    ctx.fillStyle = "#0d001a";
+    ctx.fillRect(bx + px + 2, by + py + 2, 4, 6);
+    // Purple energy swirls (animated)
+    var swirl1 = Math.floor(Math.sin(animFrame * 0.08) * 2);
+    var swirl2 = Math.floor(Math.cos(animFrame * 0.06) * 2);
+    ctx.fillStyle = "rgba(139,0,255,0.6)";
+    ctx.fillRect(bx + px + 1 + swirl1, by + py + 1, 2, 1);
+    ctx.fillRect(bx + px + 5 + swirl2, by + py + 8, 2, 1);
+    ctx.fillStyle = "rgba(155,89,182,0.5)";
+    ctx.fillRect(bx + px + 3 + swirl2, by + py + 4, 2, 2);
+    // Edge glow
+    ctx.fillStyle = "rgba(139,0,255,0.3)";
+    ctx.fillRect(bx + px - 1, by + py + 3, 1, 4);
+    ctx.fillRect(bx + px + 8, by + py + 3, 1, 4);
+  }
+
+  // Poison vial for XSS risks — green bubbling vial
+  function drawPoisonVial(bx, by, bSize) {
+    var vx = Math.floor(bSize * 0.5) - 3, vy = -8;
+    // Vial body
+    ctx.fillStyle = "#1a4d1a";
+    ctx.fillRect(bx + vx, by + vy + 2, 6, 6);
+    // Vial neck
+    ctx.fillStyle = "#2d5a2d";
+    ctx.fillRect(bx + vx + 2, by + vy, 2, 2);
+    // Poison liquid
+    ctx.fillStyle = "#2ECC71";
+    ctx.fillRect(bx + vx + 1, by + vy + 4, 4, 3);
+    // Bubbles (animated)
+    var b1 = Math.floor(Math.sin(animFrame * 0.1) * 1);
+    ctx.fillStyle = "rgba(46,204,113,0.7)";
+    ctx.fillRect(bx + vx + 2, by + vy + 3 + b1, 1, 1);
+    ctx.fillRect(bx + vx + 4, by + vy + 2 - b1, 1, 1);
+    // Drip
+    ctx.fillStyle = "rgba(46,204,113,0.5)";
+    ctx.fillRect(bx + vx + 3, by + vy + 8, 1, 1 + (animFrame % 8 < 4 ? 1 : 0));
+  }
+
   function drawLocation(loc) {
     var wx = loc.gridX * TILE;
     var wy = loc.gridY * TILE;
@@ -1653,6 +1721,15 @@ canvas#minimap {
             break;
           case "stale-code":
             drawDustOverlay(0, 0, threatSize);
+            break;
+          case "security-secret":
+            drawExposedChest(0, 0, threatSize);
+            break;
+          case "security-injection":
+            drawDarkPortal(0, 0, threatSize);
+            break;
+          case "security-xss":
+            drawPoisonVial(0, 0, threatSize);
             break;
         }
       }
@@ -1895,7 +1972,9 @@ canvas#minimap {
         ["#e8e0d0","Skull = Circular Dep"], ["#808080","Smoke = Hotspot"],
         ["#6B7280","Ruins = Orphan"], ["#cc8800","Flag = God Module"],
         ["#cc6600","Arrows = Coupling"], ["#8a7a60","Tunnel = Temporal"],
-        ["#ccaa44","Tower = Bus Factor"], ["#a09880","Dust = Stale Code"]
+        ["#ccaa44","Tower = Bus Factor"], ["#a09880","Dust = Stale Code"],
+        ["#9B59B6","Chest = Exposed Secret"], ["#8B00FF","Portal = Injection"],
+        ["#2ECC71","Vial = XSS Risk"]
       ];
       for (var tti = 0; tti < threatTypes.length; tti++) {
         lgText(ttSec, threatTypes[tti][1], "color:" + threatTypes[tti][0]);

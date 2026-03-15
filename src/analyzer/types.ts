@@ -10,7 +10,10 @@ export type IssueType =
   | "hotspot"
   | "temporal-coupling"
   | "bus-factor"
-  | "stale-code";
+  | "stale-code"
+  | "security-secret"
+  | "security-injection"
+  | "security-xss";
 
 export interface Issue {
   type: IssueType;

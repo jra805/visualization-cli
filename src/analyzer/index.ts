@@ -11,6 +11,7 @@ import { detectHotspots } from "./hotspots.js";
 import { detectTemporalCoupling } from "./temporal-coupling.js";
 import { detectBusFactors } from "./bus-factor.js";
 import { detectStaleness } from "./staleness.js";
+import { detectSecurityIssues } from "./security-scanner.js";
 
 export interface AnalyzeOptions {
   skipIssues?: boolean;
@@ -22,14 +23,17 @@ export async function analyze(
   circularDeps: string[][],
   entryPoints: string[],
   components: ComponentInfo[],
-  options: AnalyzeOptions = {}
+  options: AnalyzeOptions = {},
 ): Promise<ArchReport> {
   const issues: Issue[] = [];
 
   if (!options.skipIssues) {
     issues.push(...detectCircularDeps(circularDeps));
 
-    const { orphans: orphanList, issues: orphanIssues } = detectOrphans(graph, entryPoints);
+    const { orphans: orphanList, issues: orphanIssues } = detectOrphans(
+      graph,
+      entryPoints,
+    );
     issues.push(...orphanIssues);
 
     const { scores, issues: couplingIssues } = analyzeCoupling(graph);
@@ -38,6 +42,8 @@ export async function analyze(
     issues.push(...detectPropDrilling(components, graph));
 
     issues.push(...detectLayeringViolations(graph));
+
+    issues.push(...detectSecurityIssues(graph));
   }
 
   const { scores } = analyzeCoupling(graph);
@@ -123,4 +129,11 @@ export async function analyze(
   return report;
 }
 
-export type { ArchReport, Issue, Severity, IssueType, HotspotData, TemporalCoupling } from "./types.js";
+export type {
+  ArchReport,
+  Issue,
+  Severity,
+  IssueType,
+  HotspotData,
+  TemporalCoupling,
+} from "./types.js";

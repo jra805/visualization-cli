@@ -17,6 +17,7 @@ export interface SerializedNode {
     isCircular: boolean;
     isGodModule: boolean;
     isHotspot: boolean;
+    hasSecurityIssue: boolean;
     complexity?: number;
     changeFrequency?: number;
     changeCount?: number;
@@ -60,7 +61,7 @@ export function serializeGraph(
   graph: Graph,
   report: ArchReport,
   components: ComponentInfo[],
-  dataFlows: ComponentDataFlow[]
+  dataFlows: ComponentDataFlow[],
 ): SerializedGraph {
   const circularNodeIds = new Set<string>();
   for (const cycle of report.circularDeps) {
@@ -72,10 +73,20 @@ export function serializeGraph(
   const orphanSet = new Set(report.orphans);
 
   const godModuleIds = new Set<string>();
+  const securityIssueIds = new Set<string>();
   for (const issue of report.issues) {
     if (issue.type === "god-module") {
       for (const f of issue.files) {
         godModuleIds.add(f);
+      }
+    }
+    if (
+      issue.type === "security-secret" ||
+      issue.type === "security-injection" ||
+      issue.type === "security-xss"
+    ) {
+      for (const f of issue.files) {
+        securityIssueIds.add(f);
       }
     }
   }
@@ -130,6 +141,7 @@ export function serializeGraph(
         isCircular: circularNodeIds.has(id),
         isGodModule: godModuleIds.has(id),
         isHotspot: hotspot?.isHotspot ?? false,
+        hasSecurityIssue: securityIssueIds.has(id),
         complexity: hotspot?.complexity,
         changeFrequency: hotspot?.changeFrequency,
         changeCount: hotspot?.changeCount,
@@ -191,5 +203,10 @@ export function serializeGraph(
     }
   }
 
-  return { nodes, edges, groups: groups.length > 0 ? groups : undefined, report };
+  return {
+    nodes,
+    edges,
+    groups: groups.length > 0 ? groups : undefined,
+    report,
+  };
 }
