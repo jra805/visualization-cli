@@ -119,6 +119,11 @@ The game map format renders your codebase as a pixel-art RPG overworld:
 - **Node.js 18+**
 - **git** (for hotspot, temporal coupling, bus factor, and staleness analysis)
 
+## Documentation
+
+- **[Setup Guide](docs/SETUP.md)** — Detailed getting started guide with language-specific examples
+- **[Contributing](CONTRIBUTING.md)** — Guidelines for adding languages, formats, and analyzers
+
 ## Development
 
 ```bash
@@ -128,7 +133,9 @@ npm test               # Run tests (vitest)
 npm run test:watch     # Watch mode
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding languages, formats, and analyzers.
+## Inspiration
+
+This project was inspired by [a post on r/ClaudeAI](https://www.reddit.com/r/ClaudeAI/comments/1rp2qob/i_cant_read_code_so_i_made_claude_code_build_a/) where a user who couldn't read code had Claude Code build a tool to visualize it instead. That idea — making codebases understandable without reading every line — is exactly what codescape is about.
 
 ## License
 
