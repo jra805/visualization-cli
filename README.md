@@ -7,7 +7,7 @@ Analyze any codebase and generate interactive architecture visualizations. Point
 
 **10 languages. 5 output formats. Zero configuration.**
 
-![codescape game map output](images/game-map-example.png)
+![codescape game map — pixel-art RPG visualization of your codebase](images/main.png)
 
 ## Features
 
@@ -104,6 +104,10 @@ codescape analyze ~/projects/monorepo --focus packages/core
 codescape analyze ~/projects/big-app --group
 ```
 
+## Interactive Map
+
+![codescape interactive dependency graph](images/regular.png)
+
 ## Game Map
 
 The game map format renders your codebase as a pixel-art RPG overworld:
@@ -113,6 +117,8 @@ The game map format renders your codebase as a pixel-art RPG overworld:
 - **Threats are visible** — Circular deps, orphans, and hotspots appear as visual decay
 - **Multiple lenses** — Switch between Kingdom, Dependencies, Complexity, Hotspots, and Threats views
 - **Interactive** — Click buildings for details, pan/zoom the map, minimap navigation
+
+![codescape threats lens with inspector](images/threats.png)
 
 ## Requirements
 

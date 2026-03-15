@@ -97,6 +97,55 @@ function fbm(
   return value / totalAmp;
 }
 
+// Returns the signature terrain tile for a biome — used only for tiles
+// near the biome center. Tiles further out blend with procedural terrain.
+function biomeAccentTile(
+  biome: string,
+  det: number,
+  rng: () => number,
+): number | null {
+  // Each biome has distinctive accent tiles that distinguish it visually.
+  // Returns null to let the caller fall through to procedural terrain,
+  // which provides natural topographic variety (mountains, water, forests).
+  switch (biome) {
+    case "forest":
+      if (det > 0.55) return TERRAIN.FOREST;
+      if (det > 0.3) return TERRAIN.DARK_GRASS;
+      return null; // let procedural show through
+    case "mountain":
+      if (det > 0.5) return TERRAIN.MOUNTAIN;
+      if (det > 0.35) return TERRAIN.SNOW;
+      return TERRAIN.GRASS3;
+    case "coastal":
+      if (det < 0.35) return TERRAIN.WATER;
+      if (det < 0.5) return TERRAIN.COAST_SAND;
+      return null;
+    case "castle":
+      if (det > 0.65) return TERRAIN.CASTLE_FLOOR;
+      return null; // mostly procedural with scattered cobblestone
+    case "crystal":
+      if (det > 0.55) return TERRAIN.CRYSTAL;
+      return null;
+    case "desert":
+      if (det > 0.25) return TERRAIN.SAND;
+      return TERRAIN.GRASS4;
+    case "swamp":
+      if (det > 0.5) return TERRAIN.SWAMP;
+      if (det > 0.25) return TERRAIN.DARK_GRASS;
+      return null;
+    case "volcanic":
+      if (det > 0.5) return TERRAIN.LAVA;
+      if (det > 0.3) return TERRAIN.MOUNTAIN;
+      return TERRAIN.GRASS4;
+    case "plains":
+      if (det > 0.6) return TERRAIN.FLOWER;
+      if (det > 0.4) return rng() > 0.5 ? TERRAIN.FLOWER : TERRAIN.GRASS1;
+      return null;
+    default:
+      return null;
+  }
+}
+
 export function generateTerrain(
   width: number,
   height: number,
@@ -106,6 +155,7 @@ export function generateTerrain(
     { minX: number; minY: number; maxX: number; maxY: number }
   >,
   seedOverride?: number,
+  biomeZones?: { cx: number; cy: number; biome: string; radius: number }[],
 ): number[][] {
   const terrain: number[][] = [];
   const seed = seedOverride ?? locations.length * 7 + width * 13;
@@ -139,7 +189,78 @@ export function generateTerrain(
     return Math.min(1, Math.min(ex, ey));
   }
 
-  // All tiles use natural procedural terrain — no biome-specific painting
+  // Biome influence field — only tiles close to a zone center get biome accents.
+  // Tiles further out use the full procedural terrain for natural topography.
+  const biomeInfluence: { biome: string; strength: number }[][] = [];
+  if (biomeZones && biomeZones.length > 0) {
+    for (let y = 0; y < height; y++) {
+      biomeInfluence[y] = [];
+      for (let x = 0; x < width; x++) {
+        let maxW = 0;
+        let dominant = "";
+
+        for (const zone of biomeZones) {
+          const dx = x - zone.cx;
+          const dy = y - zone.cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          // Tight falloff — only within ~1.2x the zone radius
+          const falloff = Math.max(0, 1 - dist / (zone.radius * 1.2));
+          const w = falloff * falloff * falloff; // cubic for sharper edge
+          if (w > maxW) {
+            maxW = w;
+            dominant = zone.biome;
+          }
+        }
+
+        biomeInfluence[y][x] = { biome: dominant, strength: maxW };
+      }
+    }
+  }
+
+  // Helper: procedural terrain from elevation/moisture/detail noise
+  function proceduralTile(
+    effectiveElev: number,
+    moist: number,
+    det: number,
+  ): number {
+    if (effectiveElev < 0.22) {
+      return TERRAIN.WATER;
+    } else if (effectiveElev < 0.28) {
+      return det > 0.5 ? TERRAIN.COAST_SAND : TERRAIN.WATER;
+    } else if (effectiveElev > 0.72) {
+      return det > 0.6 ? TERRAIN.SNOW : TERRAIN.MOUNTAIN;
+    } else if (effectiveElev > 0.62) {
+      return det > 0.55 ? TERRAIN.MOUNTAIN : TERRAIN.GRASS3;
+    } else if (moist > 0.62 && effectiveElev < 0.45) {
+      if (moist > 0.72) {
+        return TERRAIN.WATER;
+      } else {
+        return det > 0.5 ? TERRAIN.SWAMP : TERRAIN.DARK_GRASS;
+      }
+    } else if (moist > 0.55) {
+      return det > 0.5 ? TERRAIN.FOREST : TERRAIN.DARK_GRASS;
+    } else if (moist < 0.35 && effectiveElev > 0.45) {
+      return det > 0.6 ? TERRAIN.SAND : TERRAIN.GRASS4;
+    } else if (moist > 0.42) {
+      if (det > 0.65) {
+        return TERRAIN.FOREST;
+      } else if (det > 0.45) {
+        return TERRAIN.FLOWER;
+      } else {
+        return Math.floor(det * 3.99);
+      }
+    } else {
+      if (det > 0.72) {
+        return TERRAIN.FOREST;
+      } else if (det > 0.6) {
+        return rng() > 0.6 ? TERRAIN.FLOWER : TERRAIN.GRASS2;
+      } else {
+        return Math.floor(det * 3.99);
+      }
+    }
+  }
+
+  // Terrain classification: procedural base everywhere, biome accents sprinkled near zone centers
   for (let y = 0; y < height; y++) {
     terrain[y] = [];
     for (let x = 0; x < width; x++) {
@@ -147,54 +268,25 @@ export function generateTerrain(
       const moist = moisture[y][x];
       const det = detail[y][x];
       const edge = edgeFalloff(x, y);
-
-      // Combine elevation with edge falloff for natural coastline
       const effectiveElev = elev * (0.3 + 0.7 * edge);
 
-      // Natural terrain based on elevation + moisture
-      if (effectiveElev < 0.22) {
-        // Deep water (low elevation near edges or in basins)
-        terrain[y][x] = TERRAIN.WATER;
-      } else if (effectiveElev < 0.28) {
-        // Shoreline: beach sand transitioning from water
-        terrain[y][x] = det > 0.5 ? TERRAIN.COAST_SAND : TERRAIN.WATER;
-      } else if (effectiveElev > 0.72) {
-        // High peaks: snow-capped mountains
-        terrain[y][x] = det > 0.6 ? TERRAIN.SNOW : TERRAIN.MOUNTAIN;
-      } else if (effectiveElev > 0.62) {
-        // Mountain foothills
-        terrain[y][x] = det > 0.55 ? TERRAIN.MOUNTAIN : TERRAIN.GRASS3;
-      } else if (moist > 0.62 && effectiveElev < 0.45) {
-        // Wet lowlands: lakes and ponds
-        if (moist > 0.72) {
-          terrain[y][x] = TERRAIN.WATER;
+      // Always start with procedural terrain — this gives us mountains, water, forests
+      const baseTile = proceduralTile(effectiveElev, moist, det);
+
+      // Overlay biome accent if we're close enough to a zone center
+      const bi = biomeInfluence.length > 0 ? biomeInfluence[y]?.[x] : null;
+
+      if (bi && bi.strength > 0.3 && bi.biome) {
+        // Strong influence: try biome accent, but let dramatic terrain show through
+        // Water and mountains at extreme elevations always win — they're the topography
+        if (effectiveElev < 0.22 || effectiveElev > 0.72) {
+          terrain[y][x] = baseTile; // keep water/mountains
         } else {
-          terrain[y][x] = det > 0.5 ? TERRAIN.SWAMP : TERRAIN.DARK_GRASS;
-        }
-      } else if (moist > 0.55) {
-        // Moist areas: dense forest
-        terrain[y][x] = det > 0.5 ? TERRAIN.FOREST : TERRAIN.DARK_GRASS;
-      } else if (moist < 0.35 && effectiveElev > 0.45) {
-        // Dry highlands: sandy with sparse vegetation
-        terrain[y][x] = det > 0.6 ? TERRAIN.SAND : TERRAIN.GRASS4;
-      } else if (moist > 0.42) {
-        // Moderate moisture: mixed forest and meadows
-        if (det > 0.65) {
-          terrain[y][x] = TERRAIN.FOREST;
-        } else if (det > 0.45) {
-          terrain[y][x] = TERRAIN.FLOWER;
-        } else {
-          terrain[y][x] = Math.floor(det * 3.99); // grass variants
+          const accent = biomeAccentTile(bi.biome, det, rng);
+          terrain[y][x] = accent !== null ? accent : baseTile;
         }
       } else {
-        // Default: open grassland with occasional features
-        if (det > 0.72) {
-          terrain[y][x] = TERRAIN.FOREST;
-        } else if (det > 0.6) {
-          terrain[y][x] = rng() > 0.6 ? TERRAIN.FLOWER : TERRAIN.GRASS2;
-        } else {
-          terrain[y][x] = Math.floor(det * 3.99); // grass variants
-        }
+        terrain[y][x] = baseTile;
       }
     }
   }

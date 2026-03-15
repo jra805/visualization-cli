@@ -2385,6 +2385,22 @@ canvas#minimap {
   }
 
   // === MINIMAP ===
+  var MINIMAP_TERRAIN_COLORS = {
+    0: "#3a5a2c", 1: "#3e5e30", 2: "#425f35", 3: "#3b5b2e",
+    4: "#1a4a1a",
+    5: "#6a6a6a",
+    6: "#1a3a5a",
+    7: "#a08a50",
+    8: "#2a4a2a",
+    9: "#6a4a8a",
+    10: "#8a2a0a",
+    11: "#5a5a5a",
+    12: "#b0a060",
+    13: "#c0c0d0",
+    14: "#2a4020",
+    15: "#5a7a3a"
+  };
+
   function drawMinimap() {
     var mw = mmCanvas.width;
     var mh = mmCanvas.height;
@@ -2392,6 +2408,20 @@ canvas#minimap {
 
     mmCtx.fillStyle = "#0d0d1a";
     mmCtx.fillRect(0, 0, mw, mh);
+
+    // Draw terrain
+    var tScaleX = mw / GRID_W;
+    var tScaleY = mh / GRID_H;
+    for (var ty = 0; ty < GRID_H; ty += 2) {
+      for (var tx = 0; tx < GRID_W; tx += 2) {
+        var tType = terrain[ty] && terrain[ty][tx];
+        if (tType !== undefined) {
+          var tc = MINIMAP_TERRAIN_COLORS[tType] || "#2a2a2a";
+          mmCtx.fillStyle = tc;
+          mmCtx.fillRect(tx * tScaleX, ty * tScaleY, tScaleX * 2 + 1, tScaleY * 2 + 1);
+        }
+      }
+    }
 
     // Draw locations as colored dots
     for (var i = 0; i < locations.length; i++) {

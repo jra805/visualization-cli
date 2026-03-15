@@ -5,14 +5,19 @@ import { serializeGraph } from "../serialize.js";
 import { computeGraphMetrics } from "../../analyzer/graph-metrics.js";
 import { mapNodesToLocations } from "./node-mapper.js";
 import { layoutLocations } from "./layout-engine.js";
-import { generateTerrain, routePaths, clearPathTerrain, clearBuildingTerrain } from "./world-builder.js";
+import {
+  generateTerrain,
+  routePaths,
+  clearPathTerrain,
+  clearBuildingTerrain,
+} from "./world-builder.js";
 import { buildGameMapHtml } from "./template.js";
 
 export function generateGameMapHtml(
   graph: Graph,
   report: ArchReport,
   components: ComponentInfo[],
-  dataFlows: ComponentDataFlow[]
+  dataFlows: ComponentDataFlow[],
 ): string {
   const data = serializeGraph(graph, report, components, dataFlows);
 
@@ -22,7 +27,14 @@ export function generateGameMapHtml(
   // Server-side computation with metrics-driven mapping
   const locations = mapNodesToLocations(data.nodes, metrics, report.issues);
   const grid = layoutLocations(locations, data.edges);
-  const terrain = generateTerrain(grid.width, grid.height, locations, grid.regions);
+  const terrain = generateTerrain(
+    grid.width,
+    grid.height,
+    locations,
+    grid.regions,
+    undefined,
+    grid.biomeZones,
+  );
   clearBuildingTerrain(terrain, locations);
   const paths = routePaths(locations, data.edges);
 
@@ -56,9 +68,10 @@ export function generateGameMapHtml(
       issueCount: report.issues.length,
       circularCount: report.circularDeps.length,
       orphanCount: report.orphans.length,
-      errorCount: report.issues.filter(i => i.severity === "error").length,
-      warningCount: report.issues.filter(i => i.severity === "warning").length,
-      infoCount: report.issues.filter(i => i.severity === "info").length,
+      errorCount: report.issues.filter((i) => i.severity === "error").length,
+      warningCount: report.issues.filter((i) => i.severity === "warning")
+        .length,
+      infoCount: report.issues.filter((i) => i.severity === "info").length,
       architecturePattern: report.architecturePattern || "unknown",
     },
   };

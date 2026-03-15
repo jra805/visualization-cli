@@ -27,15 +27,66 @@ function makeReport(overrides: Partial<ArchReport> = {}): ArchReport {
 
 function makeTestGraph() {
   const graph = createGraph();
-  addNode(graph, { id: "src/App.tsx", filePath: "src/App.tsx", label: "App", moduleType: "component", loc: 100, directory: "src" });
-  addNode(graph, { id: "src/Header.tsx", filePath: "src/Header.tsx", label: "Header", moduleType: "component", loc: 30, directory: "src" });
-  addNode(graph, { id: "src/useAuth.ts", filePath: "src/useAuth.ts", label: "useAuth", moduleType: "hook", loc: 40, directory: "src" });
-  addNode(graph, { id: "src/api.ts", filePath: "src/api.ts", label: "api", moduleType: "api-route", loc: 20, directory: "src" });
-  addNode(graph, { id: "src/types.ts", filePath: "src/types.ts", label: "types", moduleType: "type", loc: 10, directory: "src" });
-  addEdge(graph, { source: "src/App.tsx", target: "src/Header.tsx", type: "renders" });
-  addEdge(graph, { source: "src/App.tsx", target: "src/useAuth.ts", type: "import" });
-  addEdge(graph, { source: "src/Header.tsx", target: "src/api.ts", type: "import" });
-  addEdge(graph, { source: "src/api.ts", target: "src/types.ts", type: "import" });
+  addNode(graph, {
+    id: "src/App.tsx",
+    filePath: "src/App.tsx",
+    label: "App",
+    moduleType: "component",
+    loc: 100,
+    directory: "src",
+  });
+  addNode(graph, {
+    id: "src/Header.tsx",
+    filePath: "src/Header.tsx",
+    label: "Header",
+    moduleType: "component",
+    loc: 30,
+    directory: "src",
+  });
+  addNode(graph, {
+    id: "src/useAuth.ts",
+    filePath: "src/useAuth.ts",
+    label: "useAuth",
+    moduleType: "hook",
+    loc: 40,
+    directory: "src",
+  });
+  addNode(graph, {
+    id: "src/api.ts",
+    filePath: "src/api.ts",
+    label: "api",
+    moduleType: "api-route",
+    loc: 20,
+    directory: "src",
+  });
+  addNode(graph, {
+    id: "src/types.ts",
+    filePath: "src/types.ts",
+    label: "types",
+    moduleType: "type",
+    loc: 10,
+    directory: "src",
+  });
+  addEdge(graph, {
+    source: "src/App.tsx",
+    target: "src/Header.tsx",
+    type: "renders",
+  });
+  addEdge(graph, {
+    source: "src/App.tsx",
+    target: "src/useAuth.ts",
+    type: "import",
+  });
+  addEdge(graph, {
+    source: "src/Header.tsx",
+    target: "src/api.ts",
+    type: "import",
+  });
+  addEdge(graph, {
+    source: "src/api.ts",
+    target: "src/types.ts",
+    type: "import",
+  });
   return graph;
 }
 
@@ -64,9 +115,23 @@ describe("game-map", () => {
 
     it("assigns god modules as large", () => {
       const graph = createGraph();
-      addNode(graph, { id: "big.ts", filePath: "big.ts", label: "big", moduleType: "component", loc: 500, directory: "" });
+      addNode(graph, {
+        id: "big.ts",
+        filePath: "big.ts",
+        label: "big",
+        moduleType: "component",
+        loc: 500,
+        directory: "",
+      });
       const report = makeReport({
-        issues: [{ type: "god-module", severity: "warning", message: "test", files: ["big.ts"] }],
+        issues: [
+          {
+            type: "god-module",
+            severity: "warning",
+            message: "test",
+            files: ["big.ts"],
+          },
+        ],
       });
       const serialized = serializeGraph(graph, report, [], []);
       const locations = mapNodesToLocations(serialized.nodes);
@@ -77,68 +142,162 @@ describe("game-map", () => {
 
     it("populates threats from issues array", () => {
       const graph = createGraph();
-      addNode(graph, { id: "a.ts", filePath: "a.ts", label: "a", moduleType: "service", loc: 50, directory: "" });
-      addNode(graph, { id: "b.ts", filePath: "b.ts", label: "b", moduleType: "component", loc: 30, directory: "" });
+      addNode(graph, {
+        id: "a.ts",
+        filePath: "a.ts",
+        label: "a",
+        moduleType: "service",
+        loc: 50,
+        directory: "",
+      });
+      addNode(graph, {
+        id: "b.ts",
+        filePath: "b.ts",
+        label: "b",
+        moduleType: "component",
+        loc: 30,
+        directory: "",
+      });
       const report = makeReport({
         issues: [
-          { type: "high-coupling", severity: "warning", message: "too coupled", files: ["a.ts"] },
-          { type: "layering-violation", severity: "warning", message: "bad import", files: ["a.ts", "b.ts"] },
+          {
+            type: "high-coupling",
+            severity: "warning",
+            message: "too coupled",
+            files: ["a.ts"],
+          },
+          {
+            type: "layering-violation",
+            severity: "warning",
+            message: "bad import",
+            files: ["a.ts", "b.ts"],
+          },
         ],
       });
       const serialized = serializeGraph(graph, report, [], []);
-      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+      const locations = mapNodesToLocations(
+        serialized.nodes,
+        undefined,
+        report.issues,
+      );
 
-      const locA = locations.find(l => l.label === "a")!;
+      const locA = locations.find((l) => l.label === "a")!;
       expect(locA.threats).toHaveLength(2);
-      expect(locA.threats.map(t => t.type)).toContain("high-coupling");
-      expect(locA.threats.map(t => t.type)).toContain("layering-violation");
+      expect(locA.threats.map((t) => t.type)).toContain("high-coupling");
+      expect(locA.threats.map((t) => t.type)).toContain("layering-violation");
       expect(locA.condition).toBe("damaged"); // warning = damaged
 
-      const locB = locations.find(l => l.label === "b")!;
+      const locB = locations.find((l) => l.label === "b")!;
       expect(locB.threats).toHaveLength(1);
       expect(locB.threats[0].type).toBe("layering-violation");
     });
 
     it("sets condition to ruined for orphans", () => {
       const graph = createGraph();
-      addNode(graph, { id: "orphan.ts", filePath: "orphan.ts", label: "orphan", moduleType: "util", loc: 10, directory: "" });
+      addNode(graph, {
+        id: "orphan.ts",
+        filePath: "orphan.ts",
+        label: "orphan",
+        moduleType: "util",
+        loc: 10,
+        directory: "",
+      });
       const report = makeReport({
         orphans: ["orphan.ts"],
-        issues: [{ type: "orphan-module", severity: "info", message: "orphan", files: ["orphan.ts"] }],
+        issues: [
+          {
+            type: "orphan-module",
+            severity: "info",
+            message: "orphan",
+            files: ["orphan.ts"],
+          },
+        ],
       });
       const serialized = serializeGraph(graph, report, [], []);
-      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+      const locations = mapNodesToLocations(
+        serialized.nodes,
+        undefined,
+        report.issues,
+      );
 
       expect(locations[0].condition).toBe("ruined");
-      expect(locations[0].threats.some(t => t.type === "orphan-module")).toBe(true);
+      expect(locations[0].threats.some((t) => t.type === "orphan-module")).toBe(
+        true,
+      );
     });
 
     it("sets condition to burning for error-severity threats", () => {
       const graph = createGraph();
-      addNode(graph, { id: "x.ts", filePath: "x.ts", label: "x", moduleType: "component", loc: 10, directory: "" });
+      addNode(graph, {
+        id: "x.ts",
+        filePath: "x.ts",
+        label: "x",
+        moduleType: "component",
+        loc: 10,
+        directory: "",
+      });
       const report = makeReport({
         circularDeps: [["x.ts", "y.ts"]],
-        issues: [{ type: "circular-dependency", severity: "error", message: "cycle", files: ["x.ts"] }],
+        issues: [
+          {
+            type: "circular-dependency",
+            severity: "error",
+            message: "cycle",
+            files: ["x.ts"],
+          },
+        ],
       });
       const serialized = serializeGraph(graph, report, [], []);
-      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+      const locations = mapNodesToLocations(
+        serialized.nodes,
+        undefined,
+        report.issues,
+      );
 
       expect(locations[0].condition).toBe("burning");
-      expect(locations[0].threats.some(t => t.type === "circular-dependency")).toBe(true);
+      expect(
+        locations[0].threats.some((t) => t.type === "circular-dependency"),
+      ).toBe(true);
     });
 
     it("accumulates multiple threats on same node", () => {
       const graph = createGraph();
-      addNode(graph, { id: "bad.ts", filePath: "bad.ts", label: "bad", moduleType: "service", loc: 1200, directory: "" });
+      addNode(graph, {
+        id: "bad.ts",
+        filePath: "bad.ts",
+        label: "bad",
+        moduleType: "service",
+        loc: 1200,
+        directory: "",
+      });
       const report = makeReport({
         issues: [
-          { type: "god-module", severity: "warning", message: "big", files: ["bad.ts"] },
-          { type: "hotspot", severity: "error", message: "hot", files: ["bad.ts"] },
-          { type: "high-coupling", severity: "warning", message: "coupled", files: ["bad.ts"] },
+          {
+            type: "god-module",
+            severity: "warning",
+            message: "big",
+            files: ["bad.ts"],
+          },
+          {
+            type: "hotspot",
+            severity: "error",
+            message: "hot",
+            files: ["bad.ts"],
+          },
+          {
+            type: "high-coupling",
+            severity: "warning",
+            message: "coupled",
+            files: ["bad.ts"],
+          },
         ],
       });
       const serialized = serializeGraph(graph, report, [], []);
-      const locations = mapNodesToLocations(serialized.nodes, undefined, report.issues);
+      const locations = mapNodesToLocations(
+        serialized.nodes,
+        undefined,
+        report.issues,
+      );
 
       expect(locations[0].threats).toHaveLength(3);
       expect(locations[0].condition).toBe("burning"); // error takes priority
@@ -146,7 +305,14 @@ describe("game-map", () => {
 
     it("healthy nodes have empty threats and healthy condition", () => {
       const graph = createGraph();
-      addNode(graph, { id: "ok.ts", filePath: "ok.ts", label: "ok", moduleType: "util", loc: 20, directory: "" });
+      addNode(graph, {
+        id: "ok.ts",
+        filePath: "ok.ts",
+        label: "ok",
+        moduleType: "util",
+        loc: 20,
+        directory: "",
+      });
       const serialized = serializeGraph(graph, makeReport(), [], []);
       const locations = mapNodesToLocations(serialized.nodes, undefined, []);
 
@@ -156,9 +322,23 @@ describe("game-map", () => {
 
     it("carries through component metadata", () => {
       const graph = createGraph();
-      addNode(graph, { id: "x.tsx", filePath: "x.tsx", label: "X", moduleType: "component", loc: 10, directory: "" });
+      addNode(graph, {
+        id: "x.tsx",
+        filePath: "x.tsx",
+        label: "X",
+        moduleType: "component",
+        loc: 10,
+        directory: "",
+      });
       const components: ComponentInfo[] = [
-        { name: "X", filePath: "x.tsx", props: [{ name: "title", type: "string", isRequired: true }], hooksUsed: ["useState"], childComponents: [], isDefaultExport: true },
+        {
+          name: "X",
+          filePath: "x.tsx",
+          props: [{ name: "title", type: "string", isRequired: true }],
+          hooksUsed: ["useState"],
+          childComponents: [],
+          isDefaultExport: true,
+        },
       ];
       const serialized = serializeGraph(graph, makeReport(), components, []);
       const locations = mapNodesToLocations(serialized.nodes);
@@ -191,8 +371,12 @@ describe("game-map", () => {
         for (let j = i + 1; j < locations.length; j++) {
           const a = locations[i];
           const b = locations[j];
-          const overlapX = a.gridX < b.gridX + b.tileSize + 1 && a.gridX + a.tileSize + 1 > b.gridX;
-          const overlapY = a.gridY < b.gridY + b.tileSize + 1 && a.gridY + a.tileSize + 1 > b.gridY;
+          const overlapX =
+            a.gridX < b.gridX + b.tileSize + 1 &&
+            a.gridX + a.tileSize + 1 > b.gridX;
+          const overlapY =
+            a.gridY < b.gridY + b.tileSize + 1 &&
+            a.gridY + a.tileSize + 1 > b.gridY;
           expect(overlapX && overlapY).toBe(false);
         }
       }
@@ -202,6 +386,66 @@ describe("game-map", () => {
       const grid = layoutLocations([], []);
       expect(grid.width).toBeGreaterThanOrEqual(20);
       expect(grid.height).toBeGreaterThanOrEqual(20);
+    });
+
+    it("produces compact layout for single-biome projects", () => {
+      // Create a simple graph where everything is likely one biome
+      const graph = createGraph();
+      for (let i = 0; i < 10; i++) {
+        addNode(graph, {
+          id: `src/comp${i}.tsx`,
+          filePath: `src/comp${i}.tsx`,
+          label: `Comp${i}`,
+          moduleType: "component",
+          loc: 20,
+          directory: "src",
+        });
+      }
+      for (let i = 1; i < 10; i++) {
+        addEdge(graph, {
+          source: `src/comp0.tsx`,
+          target: `src/comp${i}.tsx`,
+          type: "import",
+        });
+      }
+      const serialized = serializeGraph(graph, makeReport(), [], []);
+      const locations = mapNodesToLocations(serialized.nodes);
+      const grid = layoutLocations(locations, serialized.edges);
+
+      // 10 nodes single biome: smaller than a diverse multi-biome project
+      expect(grid.width).toBeLessThanOrEqual(120);
+      expect(grid.height).toBeLessThanOrEqual(120);
+    });
+
+    it("exports biomeZones from layout", () => {
+      const graph = makeTestGraph();
+      const serialized = serializeGraph(graph, makeReport(), [], []);
+      const locations = mapNodesToLocations(serialized.nodes);
+      const grid = layoutLocations(locations, serialized.edges);
+
+      expect(grid.biomeZones).toBeDefined();
+      expect(grid.biomeZones.length).toBeGreaterThan(0);
+      for (const zone of grid.biomeZones) {
+        expect(zone.cx).toBeGreaterThanOrEqual(0);
+        expect(zone.cy).toBeGreaterThanOrEqual(0);
+        expect(zone.biome).toBeTruthy();
+        expect(zone.radius).toBeGreaterThan(0);
+      }
+    });
+
+    it("compacted grid has good utilization", () => {
+      const graph = makeTestGraph();
+      const serialized = serializeGraph(graph, makeReport(), [], []);
+      const locations = mapNodesToLocations(serialized.nodes);
+      const grid = layoutLocations(locations, serialized.edges);
+
+      // All buildings should be within bounds
+      for (const loc of locations) {
+        expect(loc.gridX).toBeGreaterThanOrEqual(0);
+        expect(loc.gridY).toBeGreaterThanOrEqual(0);
+        expect(loc.gridX + loc.tileSize).toBeLessThanOrEqual(grid.width);
+        expect(loc.gridY + loc.tileSize).toBeLessThanOrEqual(grid.height);
+      }
     });
 
     it("highest importance node near center", () => {
@@ -229,7 +473,12 @@ describe("game-map", () => {
       const locations = mapNodesToLocations(serialized.nodes);
       const grid = layoutLocations(locations, serialized.edges);
 
-      const terrain = generateTerrain(grid.width, grid.height, locations, grid.regions);
+      const terrain = generateTerrain(
+        grid.width,
+        grid.height,
+        locations,
+        grid.regions,
+      );
       expect(terrain).toHaveLength(grid.height);
       expect(terrain[0]).toHaveLength(grid.width);
 
@@ -244,12 +493,24 @@ describe("game-map", () => {
 
     it("keeps grass around location tiles", () => {
       const graph = createGraph();
-      addNode(graph, { id: "a.ts", filePath: "a.ts", label: "a", moduleType: "component", loc: 10, directory: "" });
+      addNode(graph, {
+        id: "a.ts",
+        filePath: "a.ts",
+        label: "a",
+        moduleType: "component",
+        loc: 10,
+        directory: "",
+      });
       const serialized = serializeGraph(graph, makeReport(), [], []);
       const locations = mapNodesToLocations(serialized.nodes);
       const grid = layoutLocations(locations, serialized.edges);
 
-      const terrain = generateTerrain(grid.width, grid.height, locations, grid.regions);
+      const terrain = generateTerrain(
+        grid.width,
+        grid.height,
+        locations,
+        grid.regions,
+      );
       const loc = locations[0];
 
       // Tile at location should be grass-like (low terrain value, biome-tinted)
@@ -278,7 +539,17 @@ describe("game-map", () => {
         [4, 4, 4, 4, 4],
       ];
       const paths = [
-        { sourceId: "a", targetId: "b", edgeType: "import", isCircular: false, points: [[1, 1] as [number, number], [2, 1] as [number, number], [3, 1] as [number, number]] },
+        {
+          sourceId: "a",
+          targetId: "b",
+          edgeType: "import",
+          isCircular: false,
+          points: [
+            [1, 1] as [number, number],
+            [2, 1] as [number, number],
+            [3, 1] as [number, number],
+          ],
+        },
       ];
       clearPathTerrain(terrain, paths);
 
@@ -288,6 +559,32 @@ describe("game-map", () => {
       expect(terrain[1][3]).toBeLessThanOrEqual(3);
       // Non-path tiles should still be forest
       expect(terrain[0][0]).toBe(4);
+    });
+
+    it("generates biome-influenced terrain when zones provided", () => {
+      const graph = makeTestGraph();
+      const serialized = serializeGraph(graph, makeReport(), [], []);
+      const locations = mapNodesToLocations(serialized.nodes);
+      const grid = layoutLocations(locations, serialized.edges);
+
+      const terrain = generateTerrain(
+        grid.width,
+        grid.height,
+        locations,
+        grid.regions,
+        undefined,
+        grid.biomeZones,
+      );
+      expect(terrain).toHaveLength(grid.height);
+      expect(terrain[0]).toHaveLength(grid.width);
+
+      // All values should be valid terrain types
+      for (const row of terrain) {
+        for (const t of row) {
+          expect(t).toBeGreaterThanOrEqual(0);
+          expect(t).toBeLessThanOrEqual(15);
+        }
+      }
     });
   });
 
@@ -313,8 +610,8 @@ describe("game-map", () => {
       const html = generateGameMapHtml(graph, makeReport(), [], []);
 
       // No CDN/external references
-      expect(html).not.toContain("src=\"http");
-      expect(html).not.toContain("href=\"http");
+      expect(html).not.toContain('src="http');
+      expect(html).not.toContain('href="http');
       expect(html).not.toContain("fonts.googleapis");
       expect(html).not.toContain("cdnjs.cloudflare");
       expect(html).not.toContain("cdn.jsdelivr");
@@ -324,7 +621,9 @@ describe("game-map", () => {
       const graph = makeTestGraph();
       const html = generateGameMapHtml(graph, makeReport(), [], []);
 
-      const match = html.match(/<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/);
+      const match = html.match(
+        /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,
+      );
       expect(match).toBeTruthy();
 
       const data = JSON.parse(match![1]);
@@ -353,9 +652,24 @@ describe("game-map", () => {
       const graph = makeTestGraph();
       const report = makeReport({
         issues: [
-          { type: "circular-dependency", severity: "error", message: "cycle", files: ["src/App.tsx"] },
-          { type: "god-module", severity: "warning", message: "big", files: ["src/Header.tsx"] },
-          { type: "orphan-module", severity: "info", message: "orphan", files: ["src/types.ts"] },
+          {
+            type: "circular-dependency",
+            severity: "error",
+            message: "cycle",
+            files: ["src/App.tsx"],
+          },
+          {
+            type: "god-module",
+            severity: "warning",
+            message: "big",
+            files: ["src/Header.tsx"],
+          },
+          {
+            type: "orphan-module",
+            severity: "info",
+            message: "orphan",
+            files: ["src/types.ts"],
+          },
         ],
       });
       const html = generateGameMapHtml(graph, report, [], []);
@@ -381,21 +695,49 @@ describe("game-map", () => {
 
     it("marks layer violation paths with isViolation", () => {
       const graph = createGraph();
-      addNode(graph, { id: "src/repo.ts", filePath: "src/repo.ts", label: "repo", moduleType: "repository", loc: 50, directory: "src" });
-      addNode(graph, { id: "src/Page.tsx", filePath: "src/Page.tsx", label: "Page", moduleType: "page", loc: 30, directory: "src" });
-      addEdge(graph, { source: "src/repo.ts", target: "src/Page.tsx", type: "import" });
+      addNode(graph, {
+        id: "src/repo.ts",
+        filePath: "src/repo.ts",
+        label: "repo",
+        moduleType: "repository",
+        loc: 50,
+        directory: "src",
+      });
+      addNode(graph, {
+        id: "src/Page.tsx",
+        filePath: "src/Page.tsx",
+        label: "Page",
+        moduleType: "page",
+        loc: 30,
+        directory: "src",
+      });
+      addEdge(graph, {
+        source: "src/repo.ts",
+        target: "src/Page.tsx",
+        type: "import",
+      });
 
       const report = makeReport({
         issues: [
-          { type: "layering-violation", severity: "warning", message: "data imports presentation", files: ["src/repo.ts", "src/Page.tsx"] },
+          {
+            type: "layering-violation",
+            severity: "warning",
+            message: "data imports presentation",
+            files: ["src/repo.ts", "src/Page.tsx"],
+          },
         ],
       });
 
       const html = generateGameMapHtml(graph, report, [], []);
-      const match = html.match(/<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/);
+      const match = html.match(
+        /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,
+      );
       const data = JSON.parse(match![1]);
 
-      const violationPath = data.paths.find((p: any) => p.sourceId === "src/repo.ts" && p.targetId === "src/Page.tsx");
+      const violationPath = data.paths.find(
+        (p: any) =>
+          p.sourceId === "src/repo.ts" && p.targetId === "src/Page.tsx",
+      );
       expect(violationPath).toBeDefined();
       expect(violationPath.isViolation).toBe(true);
 
@@ -444,14 +786,17 @@ describe("game-map", () => {
       // Split HTML to get content outside the JSON blob:
       const jsonStart = html.indexOf('<script id="game-data"');
       const jsonEnd = html.indexOf("</script>", jsonStart) + "</script>".length;
-      const outsideJson = html.substring(0, jsonStart) + html.substring(jsonEnd);
+      const outsideJson =
+        html.substring(0, jsonStart) + html.substring(jsonEnd);
 
       // The malicious label must NOT appear in HTML outside the JSON data blob
       expect(outsideJson).not.toContain("<img onerror");
       expect(outsideJson).not.toContain("alert(1)");
 
       // The JSON data blob safely contains the string (as JSON-encoded value)
-      const match = html.match(/<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/);
+      const match = html.match(
+        /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,
+      );
       expect(match).toBeTruthy();
       const data = JSON.parse(match![1]);
       expect(data.locations[0].label).toBe("<img onerror=alert(1)>");
@@ -462,8 +807,12 @@ describe("game-map", () => {
       // The JS code should never use innerHTML to set user-controlled content
       // (a comment mentioning innerHTML for documentation is acceptable)
       const scriptSection = html.substring(html.lastIndexOf("<script>"));
-      const jsLines = scriptSection.split("\n").filter(line => !line.trim().startsWith("//"));
-      const hasInnerHtmlAssignment = jsLines.some(line => /\.innerHTML\s*=/.test(line));
+      const jsLines = scriptSection
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("//"));
+      const hasInnerHtmlAssignment = jsLines.some((line) =>
+        /\.innerHTML\s*=/.test(line),
+      );
       expect(hasInnerHtmlAssignment).toBe(false);
     });
 
@@ -479,7 +828,9 @@ describe("game-map", () => {
       const report = makeReport({ architecturePattern: "mvc" });
       const html = generateGameMapHtml(graph, report, [], []);
 
-      const match = html.match(/<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/);
+      const match = html.match(
+        /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,
+      );
       const data = JSON.parse(match![1]);
       expect(data.report.architecturePattern).toBe("mvc");
     });
