@@ -1,12 +1,26 @@
-# viz-cli
+# codescape
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
 Analyze any codebase and generate interactive architecture visualizations. Point it at a project directory and get a self-contained HTML file you can open in a browser — no server required.
 
-## Supported Languages
+**10 languages. 5 output formats. Zero configuration.**
 
-JavaScript, TypeScript, Python, Go, Java, Kotlin, Rust, C#, PHP, Ruby
+![codescape game map output](images/game-map-example.png)
+
+## Features
+
+- **Multi-language** — JavaScript, TypeScript, Python, Go, Java, Kotlin, Rust, C#, PHP, Ruby
+- **5 output formats** — Interactive graph, pixel-art game map, treemap, SVG circle-packing, Mermaid
+- **Smart analysis** — Circular dependencies, god modules, orphans, layer violations, hotspots, temporal coupling
+- **Framework-aware** — Recognizes 30+ frameworks (React, Next.js, Django, Spring, Rails, etc.)
+- **Zero config** — Works out of the box on any project. Just point and run.
+- **Self-contained output** — Every visualization is a single file with no external dependencies
 
 ## Quick Start
+
+### Install from source
 
 ```bash
 git clone https://github.com/jra805/visualization-cli.git
@@ -16,37 +30,49 @@ npm run build
 npm link
 ```
 
-Then run it against any project:
+### Run
 
 ```bash
-viz-cli analyze /path/to/your/project
+codescape analyze /path/to/your/project
 ```
 
 The output opens automatically in your default browser.
 
 ## Output Formats
 
+| Format          | Flag                   | Description                                       |
+| --------------- | ---------------------- | ------------------------------------------------- |
+| **Interactive** | `--format interactive` | Pan, zoom, click nodes, search — the default      |
+| **Game Map**    | `--format game`        | Pixel-art RPG world map with biome-themed regions |
+| **Treemap**     | `--format treemap`     | Squarified treemap sized by lines of code         |
+| **SVG**         | `--format svg`         | Circle-packing diagram grouped by directory       |
+| **Mermaid**     | `--format mermaid`     | Markdown-compatible flowchart                     |
+
 ```bash
-# Interactive graph (default) — pan, zoom, click nodes, search
-viz-cli analyze . --format interactive
-
-# Game map — pixel-art world map with biome-themed regions
-viz-cli analyze . --format game
-
-# Treemap — squarified treemap sized by lines of code
-viz-cli analyze . --format treemap
-
-# SVG — circle-packing diagram
-viz-cli analyze . --format svg
-
-# Mermaid — markdown-compatible flowchart
-viz-cli analyze . --format mermaid
+codescape analyze . --format game
+codescape analyze . --format treemap
+codescape analyze . --format svg
+codescape analyze . --format mermaid
 ```
 
-## Options
+## What It Detects
+
+| Issue                 | Description                                                              |
+| --------------------- | ------------------------------------------------------------------------ |
+| Circular dependencies | Tarjan's SCC algorithm for JS/TS, regex-based for all others             |
+| God modules           | Files with excessive fan-in + fan-out                                    |
+| Orphan modules        | Disconnected files (with smart exclusions for expected standalone files) |
+| Layer violations      | e.g., utility modules importing from UI layer                            |
+| Architecture patterns | Detects layered, MVC, hexagonal, and modular patterns                    |
+| Hotspots              | High cyclomatic complexity + frequent git changes                        |
+| Temporal coupling     | Files that consistently change together                                  |
+| Bus factor            | Files with only one contributor (via git history)                        |
+| Stale code            | Files untouched for extended periods                                     |
+
+## CLI Options
 
 ```
-viz-cli analyze [dir] [options]
+codescape analyze [dir] [options]
 
 Arguments:
   dir                      Target project directory (default: ".")
@@ -62,48 +88,48 @@ Options:
   -v, --verbose            Verbose logging
 ```
 
-## What It Detects
-
-- Circular dependencies (with Tarjan's SCC for JS/TS)
-- God modules (high fan-in + fan-out)
-- Orphan modules (disconnected files)
-- Layer violations (e.g., utils importing from UI)
-- Architecture patterns (layered, MVC, hexagonal, modular)
-- Hotspots (high complexity + frequent git changes)
-- Temporal coupling (files that always change together)
-- Framework detection (30+ frameworks recognized)
-
 ## Examples
 
-Analyze a React app, output to a specific directory:
 ```bash
-viz-cli analyze ~/projects/my-app --output ./diagrams
+# Analyze a React app, save output to a directory
+codescape analyze ~/projects/my-app --output ./diagrams
+
+# Generate a pixel-art game map of a Go backend
+codescape analyze ~/projects/api-server --format game
+
+# Focus on a specific package in a monorepo
+codescape analyze ~/projects/monorepo --focus packages/core
+
+# Auto-group by directory for large projects
+codescape analyze ~/projects/big-app --group
 ```
 
-Generate a game map of a Go backend:
-```bash
-viz-cli analyze ~/projects/api-server --format game
-```
+## Game Map
 
-Focus on a subdirectory:
-```bash
-viz-cli analyze ~/projects/monorepo --focus packages/core
-```
+The game map format renders your codebase as a pixel-art RPG overworld:
+
+- **Biomes map to architecture** — UI components live in forests, APIs on the coast, data layer in mountains, services in the castle
+- **Building size reflects importance** — PageRank-based sizing
+- **Threats are visible** — Circular deps, orphans, and hotspots appear as visual decay
+- **Multiple lenses** — Switch between Kingdom, Dependencies, Complexity, Hotspots, and Threats views
+- **Interactive** — Click buildings for details, pan/zoom the map, minimap navigation
 
 ## Requirements
 
-- Node.js 18+
-- git (for hotspot and temporal coupling analysis)
+- **Node.js 18+**
+- **git** (for hotspot, temporal coupling, bus factor, and staleness analysis)
 
 ## Development
 
 ```bash
 npm install
-npm run build          # compile TypeScript
-npm test               # run tests (vitest)
-npm run test:watch     # watch mode
+npm run build          # Compile TypeScript
+npm test               # Run tests (vitest)
+npm run test:watch     # Watch mode
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding languages, formats, and analyzers.
 
 ## License
 
-MIT
+[MIT](LICENSE)

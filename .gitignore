@@ -1,16 +1,35 @@
 node_modules/
 dist/
+*.tsbuildinfo
+
+# Generated output files
 viz-output/
 viz-output-*/
 test-output/
-*.tsbuildinfo
-.claude/bash_allow.json
-.claude/settings.local.json
-
-# Generated output files
+test-output-*/
 game-map.html
 architecture.html
 interactive.html
 treemap.html
 architecture.svg
+
+# Claude Code (personal config)
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Internal planning docs
+technical-specs/
+
+# Sample outputs (keep curated screenshots only)
 images/test-outputs/

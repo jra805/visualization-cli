@@ -13,15 +13,15 @@ export const TERRAIN = {
   MOUNTAIN: 5,
   WATER: 6,
   // Biome-specific
-  SAND: 7,         // desert biome
-  SWAMP: 8,        // swamp biome
-  CRYSTAL: 9,      // crystal biome ground
-  LAVA: 10,        // volcanic biome
+  SAND: 7, // desert biome
+  SWAMP: 8, // swamp biome
+  CRYSTAL: 9, // crystal biome ground
+  LAVA: 10, // volcanic biome
   CASTLE_FLOOR: 11, // castle biome cobblestone
-  COAST_SAND: 12,  // coastal biome beach
-  SNOW: 13,        // mountain biome peaks
-  DARK_GRASS: 14,  // forest biome dense undergrowth
-  FLOWER: 15,      // plains biome wildflowers
+  COAST_SAND: 12, // coastal biome beach
+  SNOW: 13, // mountain biome peaks
+  DARK_GRASS: 14, // forest biome dense undergrowth
+  FLOWER: 15, // plains biome wildflowers
 } as const;
 
 export interface GamePath {
@@ -77,7 +77,13 @@ function valueNoise(x: number, y: number, scale: number, seed: number): number {
 }
 
 // Fractal brownian motion - layer multiple noise octaves for natural detail
-function fbm(x: number, y: number, octaves: number, baseScale: number, seed: number): number {
+function fbm(
+  x: number,
+  y: number,
+  octaves: number,
+  baseScale: number,
+  seed: number,
+): number {
   let value = 0;
   let amplitude = 1;
   let totalAmp = 0;
@@ -95,10 +101,14 @@ export function generateTerrain(
   width: number,
   height: number,
   locations: GameLocation[],
-  _regions?: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>
+  _regions?: Map<
+    number,
+    { minX: number; minY: number; maxX: number; maxY: number }
+  >,
+  seedOverride?: number,
 ): number[][] {
   const terrain: number[][] = [];
-  const seed = locations.length * 7 + width * 13;
+  const seed = seedOverride ?? locations.length * 7 + width * 13;
   const rng = mulberry32(seed + 999);
 
   // Noise layers for different terrain features
@@ -195,26 +205,30 @@ export function generateTerrain(
 // ── Clear water/swamp under buildings — replace with biome-appropriate terrain ──
 export function clearBuildingTerrain(
   terrain: number[][],
-  locations: GameLocation[]
+  locations: GameLocation[],
 ): void {
   const height = terrain.length;
   const width = height > 0 ? terrain[0].length : 0;
 
   // Biome → replacement terrain tiles
   const BIOME_TERRAIN: Record<string, number[]> = {
-    forest:   [TERRAIN.GRASS2, TERRAIN.DARK_GRASS],
+    forest: [TERRAIN.GRASS2, TERRAIN.DARK_GRASS],
     mountain: [TERRAIN.GRASS3],
-    coastal:  [TERRAIN.COAST_SAND, TERRAIN.GRASS1],
-    castle:   [TERRAIN.CASTLE_FLOOR],
-    crystal:  [TERRAIN.CRYSTAL],
-    desert:   [TERRAIN.SAND],
-    plains:   [TERRAIN.GRASS1, TERRAIN.FLOWER],
+    coastal: [TERRAIN.COAST_SAND, TERRAIN.GRASS1],
+    castle: [TERRAIN.CASTLE_FLOOR],
+    crystal: [TERRAIN.CRYSTAL],
+    desert: [TERRAIN.SAND],
+    plains: [TERRAIN.GRASS1, TERRAIN.FLOWER],
     volcanic: [TERRAIN.LAVA],
-    swamp:    [TERRAIN.GRASS2, TERRAIN.DARK_GRASS], // clear swamp terrain too
+    swamp: [TERRAIN.GRASS2, TERRAIN.DARK_GRASS], // clear swamp terrain too
   };
 
   // Tiles that should be cleared under buildings
-  const CLEAR_TILES = new Set<number>([TERRAIN.WATER, TERRAIN.COAST_SAND, TERRAIN.SWAMP]);
+  const CLEAR_TILES = new Set<number>([
+    TERRAIN.WATER,
+    TERRAIN.COAST_SAND,
+    TERRAIN.SWAMP,
+  ]);
 
   const rng = mulberry32(locations.length * 31 + 77);
 
@@ -230,7 +244,8 @@ export function clearBuildingTerrain(
 
         if (CLEAR_TILES.has(terrain[ty][tx])) {
           // Pick a random replacement from the biome's palette
-          terrain[ty][tx] = replacements[Math.floor(rng() * replacements.length)];
+          terrain[ty][tx] =
+            replacements[Math.floor(rng() * replacements.length)];
         }
       }
     }
@@ -239,7 +254,7 @@ export function clearBuildingTerrain(
 
 export function routePaths(
   locations: GameLocation[],
-  edges: SerializedEdge[]
+  edges: SerializedEdge[],
 ): GamePath[] {
   const locMap = new Map(locations.map((l) => [l.id, l]));
   const paths: GamePath[] = [];
@@ -287,10 +302,7 @@ export function routePaths(
 }
 
 // Clear terrain along path routes (make them grass)
-export function clearPathTerrain(
-  terrain: number[][],
-  paths: GamePath[]
-): void {
+export function clearPathTerrain(terrain: number[][], paths: GamePath[]): void {
   const rng = mulberry32(42);
   for (const p of paths) {
     for (const [x, y] of p.points) {
