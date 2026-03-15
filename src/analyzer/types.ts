@@ -13,7 +13,8 @@ export type IssueType =
   | "stale-code"
   | "security-secret"
   | "security-injection"
-  | "security-xss";
+  | "security-xss"
+  | "security-crypto";
 
 export interface Issue {
   type: IssueType;

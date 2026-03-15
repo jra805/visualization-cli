@@ -15,7 +15,7 @@ export interface BusFactorData {
  */
 export function detectBusFactors(
   graph: Graph,
-  rootDir: string
+  rootDir: string,
 ): Map<string, BusFactorData> {
   const result = new Map<string, BusFactorData>();
 
@@ -23,8 +23,8 @@ export function detectBusFactors(
   let stdout: string;
   try {
     stdout = execSync(
-      `git log --format="%aN|||%H" --name-only`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 }
+      `git log --since="12 months ago" --format="%aN|||%H" --name-only`,
+      { cwd: rootDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
     );
   } catch {
     return result;

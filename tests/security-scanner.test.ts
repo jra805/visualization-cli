@@ -228,6 +228,43 @@ describe("security-scanner", () => {
       expect(mockedReadFileSync).not.toHaveBeenCalled();
     });
 
+    it("skips security scanner files (self-exclusion)", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/analyzer/security-scanner.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue("const result = eval(userInput);\n");
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+      expect(mockedReadFileSync).not.toHaveBeenCalled();
+    });
+
+    it("skips innerHTML when file has escape function", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/render.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue(
+        "function esc(s) { return s.replace(/</g, '&lt;'); }\nel.innerHTML = esc(html);\n",
+      );
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("still flags innerHTML when no escape function exists", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/render.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue("el.innerHTML = userInput;\n");
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe("security-xss");
+    });
+
     it("skips files over 100KB", () => {
       const graph = makeGraph({
         filePath: "/app/src/big.ts",
@@ -251,7 +288,7 @@ describe("security-scanner", () => {
 
       const issues = detectSecurityIssues(graph);
       expect(issues).toHaveLength(1);
-      expect(issues[0].type).toBe("security-xss"); // grouped under xss issue type for crypto
+      expect(issues[0].type).toBe("security-crypto");
     });
 
     it("detects hashlib.md5 in Python", () => {
@@ -260,6 +297,7 @@ describe("security-scanner", () => {
 
       const issues = detectSecurityIssues(graph);
       expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe("security-crypto");
     });
   });
 

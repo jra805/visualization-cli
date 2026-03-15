@@ -1731,6 +1731,9 @@ canvas#minimap {
           case "security-xss":
             drawPoisonVial(0, 0, threatSize);
             break;
+          case "security-crypto":
+            drawPoisonVial(0, 0, threatSize);
+            break;
         }
       }
     }

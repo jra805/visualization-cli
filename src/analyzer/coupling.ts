@@ -16,13 +16,48 @@ interface CouplingThresholds {
 }
 
 const LANGUAGE_THRESHOLDS: Record<string, CouplingThresholds> = {
-  java:       { godModuleFanOut: 30, godModuleLoc: 1500, highCouplingFanIn: 15, highCouplingFanOut: 15 },
-  kotlin:     { godModuleFanOut: 30, godModuleLoc: 1500, highCouplingFanIn: 15, highCouplingFanOut: 15 },
-  csharp:     { godModuleFanOut: 30, godModuleLoc: 1500, highCouplingFanIn: 15, highCouplingFanOut: 15 },
-  python:     { godModuleFanOut: 15, godModuleLoc: 800,  highCouplingFanIn: 8,  highCouplingFanOut: 8  },
-  ruby:       { godModuleFanOut: 15, godModuleLoc: 800,  highCouplingFanIn: 8,  highCouplingFanOut: 8  },
-  go:         { godModuleFanOut: 15, godModuleLoc: 800,  highCouplingFanIn: 10, highCouplingFanOut: 10 },
-  default:    { godModuleFanOut: 20, godModuleLoc: 1000, highCouplingFanIn: 10, highCouplingFanOut: 10 },
+  java: {
+    godModuleFanOut: 30,
+    godModuleLoc: 1500,
+    highCouplingFanIn: 15,
+    highCouplingFanOut: 15,
+  },
+  kotlin: {
+    godModuleFanOut: 30,
+    godModuleLoc: 1500,
+    highCouplingFanIn: 15,
+    highCouplingFanOut: 15,
+  },
+  csharp: {
+    godModuleFanOut: 30,
+    godModuleLoc: 1500,
+    highCouplingFanIn: 15,
+    highCouplingFanOut: 15,
+  },
+  python: {
+    godModuleFanOut: 15,
+    godModuleLoc: 800,
+    highCouplingFanIn: 8,
+    highCouplingFanOut: 8,
+  },
+  ruby: {
+    godModuleFanOut: 15,
+    godModuleLoc: 800,
+    highCouplingFanIn: 8,
+    highCouplingFanOut: 8,
+  },
+  go: {
+    godModuleFanOut: 15,
+    godModuleLoc: 800,
+    highCouplingFanIn: 10,
+    highCouplingFanOut: 10,
+  },
+  default: {
+    godModuleFanOut: 20,
+    godModuleLoc: 1000,
+    highCouplingFanIn: 10,
+    highCouplingFanOut: 10,
+  },
 };
 
 // Module types exempt from god-module fan-out check (barrel files, bootstraps)
@@ -31,9 +66,20 @@ const FANOUT_EXEMPT_TYPES = new Set(["entry-point", "config"]);
 // Module types that get relaxed fan-out thresholds (orchestrators)
 const ORCHESTRATOR_TYPES = new Set(["controller", "handler"]);
 
-export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues: Issue[] } {
+export function analyzeCoupling(graph: Graph): {
+  scores: CouplingScore[];
+  issues: Issue[];
+} {
   const scores: CouplingScore[] = [];
   const issues: Issue[] = [];
+
+  // Compute median LOC for relative god-module threshold
+  const allLocs = [...graph.nodes.values()]
+    .map((n) => n.loc)
+    .filter((l) => l > 0)
+    .sort((a, b) => a - b);
+  const medianLoc =
+    allLocs.length > 0 ? allLocs[Math.floor(allLocs.length / 2)] : 100;
 
   for (const [id, node] of graph.nodes) {
     if (node.moduleType === "test") continue;
@@ -58,8 +104,12 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
       }
     }
 
-    if (node.loc > thresholds.godModuleLoc) {
-      godReasons.push(`${node.loc} LOC (threshold ${thresholds.godModuleLoc})`);
+    const adaptiveLocThreshold = Math.max(
+      medianLoc * 3,
+      thresholds.godModuleLoc,
+    );
+    if (node.loc > adaptiveLocThreshold) {
+      godReasons.push(`${node.loc} LOC (threshold ${adaptiveLocThreshold})`);
     }
 
     if (godReasons.length > 0) {
@@ -72,7 +122,10 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
     }
 
     // High coupling: both high fan-in and fan-out
-    if (fi > thresholds.highCouplingFanIn && fo > thresholds.highCouplingFanOut) {
+    if (
+      fi > thresholds.highCouplingFanIn &&
+      fo > thresholds.highCouplingFanOut
+    ) {
       issues.push({
         type: "high-coupling",
         severity: "warning",
@@ -82,7 +135,7 @@ export function analyzeCoupling(graph: Graph): { scores: CouplingScore[]; issues
     }
   }
 
-  scores.sort((a, b) => (b.fanIn + b.fanOut) - (a.fanIn + a.fanOut));
+  scores.sort((a, b) => b.fanIn + b.fanOut - (a.fanIn + a.fanOut));
 
   return { scores, issues };
 }

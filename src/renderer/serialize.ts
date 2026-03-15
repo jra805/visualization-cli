@@ -83,7 +83,8 @@ export function serializeGraph(
     if (
       issue.type === "security-secret" ||
       issue.type === "security-injection" ||
-      issue.type === "security-xss"
+      issue.type === "security-xss" ||
+      issue.type === "security-crypto"
     ) {
       for (const f of issue.files) {
         securityIssueIds.add(f);

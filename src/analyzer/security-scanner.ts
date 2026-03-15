@@ -11,7 +11,11 @@ export interface SecurityFinding {
 
 interface SecurityRule {
   id: string;
-  issueType: "security-secret" | "security-injection" | "security-xss";
+  issueType:
+    | "security-secret"
+    | "security-injection"
+    | "security-xss"
+    | "security-crypto";
   severity: Severity;
   pattern: RegExp;
   languages?: string[];
@@ -117,7 +121,7 @@ const RULES: SecurityRule[] = [
   // 5. Insecure crypto
   {
     id: "insecure-crypto-md5",
-    issueType: "security-xss",
+    issueType: "security-crypto",
     severity: "warning",
     pattern: /createHash\s*\(\s*["']md5["']\)/,
     languages: ["javascript", "typescript"],
@@ -125,7 +129,7 @@ const RULES: SecurityRule[] = [
   },
   {
     id: "insecure-crypto-md5-python",
-    issueType: "security-xss",
+    issueType: "security-crypto",
     severity: "warning",
     pattern: /hashlib\.md5\s*\(/,
     languages: ["python"],
@@ -133,7 +137,7 @@ const RULES: SecurityRule[] = [
   },
   {
     id: "insecure-crypto-sha1",
-    issueType: "security-xss",
+    issueType: "security-crypto",
     severity: "warning",
     pattern: /createHash\s*\(\s*["']sha1["']\)/,
     languages: ["javascript", "typescript"],
@@ -166,12 +170,14 @@ const RULES: SecurityRule[] = [
   },
 ];
 
-/** Files to skip: test files, type definitions, env examples */
+/** Files to skip: test files, type definitions, env examples, security tooling */
 function shouldSkipFile(filePath: string, moduleType: string): boolean {
   if (moduleType === "test") return true;
   if (filePath.endsWith(".d.ts")) return true;
   if (/\.env\.example$|\.env\.sample$|\.env\.template$/i.test(filePath))
     return true;
+  // Security analysis tooling contains rule patterns that match their own rules
+  if (/security.scanner|security.analyzer/i.test(filePath)) return true;
   return false;
 }
 
@@ -212,6 +218,10 @@ export function detectSecurityIssues(graph: Graph): Issue[] {
     const lines = source.split("\n");
     const findings: SecurityFinding[] = [];
 
+    // If the file defines a sanitization/escape function, innerHTML usage is intentional
+    const hasEscapeFunction =
+      /function\s+(?:esc|escHtml|sanitize|escape|encode)\s*\(/.test(source);
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
@@ -234,6 +244,9 @@ export function detectSecurityIssues(graph: Graph): Issue[] {
 
         // False positive: secret in type definition
         if (rule.id === "secret" && isTypeDefinition(line)) continue;
+
+        // False positive: innerHTML in file with its own escape/sanitize function
+        if (rule.id === "xss-innerhtml" && hasEscapeFunction) continue;
 
         findings.push({
           rule: rule.id,
