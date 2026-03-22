@@ -195,11 +195,11 @@ codescape analyze . --output ./diagrams
 
 Each format produces a single self-contained file:
 
-- Interactive → `codescape-interactive.html`
-- Game map → `codescape-game.html`
-- Treemap → `codescape-treemap.html`
-- SVG → `codescape-svg.svg`
-- Mermaid → `codescape-mermaid.md`
+- Interactive → `interactive.html`
+- Game map → `game-map.html`
+- Treemap → `treemap.html`
+- SVG → `architecture.svg`
+- Mermaid → `architecture.html`
 
 ## Troubleshooting
 
@@ -217,3 +217,32 @@ Use `--focus`, `--depth`, or `--group` to reduce scope. See "Working with Large 
 
 **Output doesn't open automatically**
 Use `--output ./out` to save the file, then open it manually in your browser.
+
+## Understanding Results
+
+Codescape detects issues automatically and groups them by severity:
+
+| Issue | Severity | What It Means | What To Do |
+|-------|----------|--------------|------------|
+| Circular Dependency | error | Files import each other in a loop, which can cause bugs | Extract shared code into a separate file |
+| Oversized Module | warning | A file has too many connections or is too large | Split into smaller, focused files |
+| High Coupling | warning | A file depends on (or is depended on by) many others | Introduce interfaces or facades |
+| Unused Module | info | A file isn't imported by anything and imports nothing | Import it or remove it |
+| Change Hotspot | error/warning | Complex file that changes often — common bug source | Simplify logic or break into smaller functions |
+| Single Maintainer | warning | Only one person has changed this file recently | Have another team member pair on this area |
+| Stale Code | info | File hasn't been touched in a long time | Review if it's still needed |
+| Layer Violation | warning | A lower-level module imports from a higher-level one | Invert the dependency or extract shared code |
+| Hidden Coupling | info/warning | Files always change together but don't import each other | Make the dependency explicit |
+| Security Issues | error/warning | Potential secrets, injection, XSS, or weak crypto | See specific suggestion in the visualization |
+
+### How Thresholds Work
+
+- **Hotspot score** = normalized complexity × change frequency. Files scoring ≥ 0.5 are flagged.
+- **Bus factor** = number of authors with ≥ 10% of commits in the last 12 months. Files with only 1 contributor are flagged.
+- **Staleness**: active (< 6 months), dusty (6–12 months), abandoned (> 12 months).
+- **Temporal coupling**: files co-changed ≥ 3 times with ≥ 50% confidence and no direct import.
+- **God module**: LOC > max(median × 3, base threshold), or fan-out exceeds language-specific limit.
+
+### Git-Dependent Features
+
+Hotspots, temporal coupling, bus factor, and stale code analysis require git history. If git is unavailable, these features are skipped and a warning is shown in the CLI output.

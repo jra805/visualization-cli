@@ -396,5 +396,30 @@ describe("renderer", () => {
       expect(node.data.isCircular).toBe(true);
       expect(node.data.isOrphan).toBe(true);
     });
+
+    it("embeds issue descriptions JSON in interactive HTML", () => {
+      const graph = createGraph();
+      addNode(graph, {
+        id: "src/a.ts",
+        filePath: "src/a.ts",
+        label: "a",
+        moduleType: "component",
+        loc: 10,
+        directory: "src",
+      });
+
+      const report = makeReport();
+      const html = generateInteractiveHtml(graph, report, [], []);
+
+      const match = html.match(
+        /<script id="issue-descriptions" type="application\/json">([\s\S]*?)<\/script>/,
+      );
+      expect(match).toBeTruthy();
+      const descs = JSON.parse(match![1]);
+      expect(descs["circular-dependency"]).toBeDefined();
+      expect(descs["circular-dependency"].title).toBe("Circular Dependency");
+      expect(descs["circular-dependency"].explanation).toBeTruthy();
+      expect(descs["circular-dependency"].suggestion).toBeTruthy();
+    });
   });
 });

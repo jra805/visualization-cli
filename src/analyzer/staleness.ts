@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
 import type { Graph } from "../graph/types.js";
+import { GIT_MAX_BUFFER } from "./git-utils.js";
 
 export type StaleLevel = "active" | "dusty" | "abandoned";
 
@@ -20,17 +21,18 @@ export interface StalenessData {
 export function detectStaleness(
   graph: Graph,
   rootDir: string,
-  staleMonths: number = 6
+  staleMonths: number = 6,
 ): Map<string, StalenessData> {
   const result = new Map<string, StalenessData>();
 
   // Get last commit date for all files in one call
   let stdout: string;
   try {
-    stdout = execSync(
-      `git log --format="%aI" --name-only --diff-filter=ACMR`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 }
-    );
+    stdout = execSync(`git log --format="%aI" --name-only --diff-filter=ACMR`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      maxBuffer: GIT_MAX_BUFFER,
+    });
   } catch {
     return result;
   }
@@ -64,7 +66,9 @@ export function detectStaleness(
     if (!dateStr) continue;
 
     const lastDate = new Date(dateStr);
-    const staleDays = Math.floor((now - lastDate.getTime()) / (24 * 60 * 60 * 1000));
+    const staleDays = Math.floor(
+      (now - lastDate.getTime()) / (24 * 60 * 60 * 1000),
+    );
 
     let staleLevel: StaleLevel = "active";
     if (staleDays * 24 * 60 * 60 * 1000 >= abandonedThreshold) {

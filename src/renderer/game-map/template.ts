@@ -1,5 +1,6 @@
 import type { GameLocation } from "./node-mapper.js";
 import type { GamePath } from "./world-builder.js";
+import { getAllIssueDescriptions } from "../../analyzer/issue-descriptions.js";
 
 export interface GameMapData {
   locations: GameLocation[];
@@ -26,6 +27,10 @@ export interface GameMapData {
 export function buildGameMapHtml(gameData: GameMapData): string {
   // Escape </ sequences to prevent script tag injection
   const jsonData = JSON.stringify(gameData).replace(/<\//g, "<\\/");
+  const issueDescs = JSON.stringify(getAllIssueDescriptions()).replace(
+    /<\//g,
+    "<\\/",
+  );
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -543,6 +548,7 @@ canvas#minimap {
 </div>
 
 <script id="game-data" type="application/json">${jsonData}</script>
+<script id="issue-descriptions" type="application/json">${issueDescs}</script>
 <script>
 (function() {
   "use strict";
@@ -555,6 +561,11 @@ canvas#minimap {
     document.body.textContent = "Failed to parse game data: " + e.message;
     return;
   }
+
+  var issueHelp = {};
+  try {
+    issueHelp = JSON.parse(document.getElementById("issue-descriptions").textContent || "{}");
+  } catch(e) { /* fallback: no descriptions */ }
 
   var locations = raw.locations || [];
   var terrain = raw.terrain || [];
@@ -2551,8 +2562,20 @@ canvas#minimap {
 
       var typeLine = document.createElement("div");
       typeLine.className = "threat-type";
-      typeLine.textContent = ent.threat.type.replace(/-/g, " ");
+      var desc = issueHelp[ent.threat.type];
+      typeLine.textContent = desc ? desc.title : ent.threat.type.replace(/-/g, " ");
       info.appendChild(typeLine);
+
+      if (desc) {
+        var helpLine = document.createElement("div");
+        helpLine.style.cssText = "font-size:10px;color:#9CA3AF;margin:2px 0";
+        helpLine.textContent = desc.explanation;
+        info.appendChild(helpLine);
+        var fixLine = document.createElement("div");
+        fixLine.style.cssText = "font-size:10px;color:#7ee787;margin-bottom:2px";
+        fixLine.textContent = "Fix: " + desc.suggestion;
+        info.appendChild(fixLine);
+      }
 
       var fileLine = document.createElement("div");
       fileLine.className = "threat-file";

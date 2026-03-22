@@ -1,6 +1,7 @@
 import type { ScanResult } from "../scanner/types.js";
 import type { ParseResult } from "./types.js";
 import type { Graph } from "../graph/types.js";
+import type { AnalysisContext } from "../analyzer/analysis-context.js";
 import { createGraph, addNode, addEdge } from "../graph/index.js";
 import { getParsersForLanguages } from "./parser-registry.js";
 import { parseComponents } from "./component-parser.js";
@@ -13,7 +14,10 @@ export interface FullParseResult {
   parseResult: ParseResult;
 }
 
-export async function parse(scanResult: ScanResult): Promise<FullParseResult> {
+export async function parse(
+  scanResult: ScanResult,
+  context?: AnalysisContext,
+): Promise<FullParseResult> {
   const { rootDir, files, languages, framework } = scanResult;
 
   const graph = createGraph();
@@ -44,7 +48,10 @@ export async function parse(scanResult: ScanResult): Promise<FullParseResult> {
         allCircularDeps.push(...result.circularDeps);
       }
     } catch {
-      // Parser failure for a language — continue with others
+      context?.warnings.push({
+        category: "parser",
+        message: `Some ${parser.extensions.join("/")} files failed to parse — dependency edges may be incomplete`,
+      });
     }
   }
 
@@ -53,12 +60,22 @@ export async function parse(scanResult: ScanResult): Promise<FullParseResult> {
 
   // Parse React/Vue/Angular components with ts-morph (JS/TS frameworks only)
   const jsFrameworks = [
-    "react", "nextjs", "vue", "nuxt", "angular", "svelte", "sveltekit",
-    "remix", "astro", "solidjs",
+    "react",
+    "nextjs",
+    "vue",
+    "nuxt",
+    "angular",
+    "svelte",
+    "sveltekit",
+    "remix",
+    "astro",
+    "solidjs",
   ];
   const isJsFramework = jsFrameworks.includes(framework);
 
-  const tsxFiles = files.filter((f) => f.endsWith(".tsx") || f.endsWith(".jsx"));
+  const tsxFiles = files.filter(
+    (f) => f.endsWith(".tsx") || f.endsWith(".jsx"),
+  );
 
   let components: import("./types.js").ComponentInfo[] = [];
   let dataFlows: import("./types.js").ComponentDataFlow[] = [];
@@ -66,14 +83,24 @@ export async function parse(scanResult: ScanResult): Promise<FullParseResult> {
   if (isJsFramework && tsxFiles.length > 0) {
     try {
       components = parseComponents(tsxFiles, rootDir);
+      if (context) context.componentsParsed = true;
     } catch {
-      // ts-morph may fail on some projects
+      context?.warnings.push({
+        category: "parser",
+        message:
+          "Component analysis failed (ts-morph) — React/Vue component details unavailable",
+      });
     }
 
     try {
       dataFlows = parseDataFlows(tsxFiles, rootDir);
+      if (context) context.dataFlowParsed = true;
     } catch {
-      // ts-morph may fail on some projects
+      context?.warnings.push({
+        category: "parser",
+        message:
+          "Data flow analysis failed (ts-morph) — data flow edges unavailable",
+      });
     }
 
     // Add render edges for component children

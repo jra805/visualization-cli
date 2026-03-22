@@ -56,4 +56,5 @@ export interface ArchReport {
   architecturePattern?: ArchitecturePattern;
   hotspots?: Map<string, HotspotData>;
   temporalCouplings?: TemporalCoupling[];
+  context?: import("./analysis-context.js").AnalysisContext;
 }

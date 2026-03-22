@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import type { Graph } from "../graph/types.js";
 import { normalizePath } from "../utils/paths.js";
+import { GIT_MAX_BUFFER } from "./git-utils.js";
 
 export interface BusFactorData {
   file: string;
@@ -25,7 +26,7 @@ export function detectBusFactors(
   try {
     stdout = execSync(
       `git log --since="12 months ago" --format="%aN|||%H" --name-only`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
+      { cwd: rootDir, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER },
     );
   } catch {
     return result;

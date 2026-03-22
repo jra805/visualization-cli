@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
+import { GIT_MAX_BUFFER } from "./git-utils.js";
 
 export interface FileChangeFrequency {
   filePath: string;
@@ -19,13 +20,13 @@ export interface CoChange {
  */
 export function getChangeFrequencies(
   rootDir: string,
-  months: number = 6
+  months: number = 6,
 ): Map<string, FileChangeFrequency> {
   let stdout: string;
   try {
     stdout = execSync(
       `git log --name-only --pretty=format:"" --since="${months} months ago"`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 }
+      { cwd: rootDir, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER },
     );
   } catch {
     // Not a git repo or git not available
@@ -62,13 +63,13 @@ export function getChangeFrequencies(
  */
 export function getCoChangedFiles(
   rootDir: string,
-  months: number = 6
+  months: number = 6,
 ): CoChange[] {
   let stdout: string;
   try {
     stdout = execSync(
       `git log --name-only --pretty=format:"---COMMIT---" --since="${months} months ago"`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 }
+      { cwd: rootDir, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER },
     );
   } catch {
     return [];
@@ -116,7 +117,7 @@ export function getCoChangedFiles(
     const [fileA, fileB] = key.split("|||");
     const maxChanges = Math.max(
       fileCounts.get(fileA) ?? 0,
-      fileCounts.get(fileB) ?? 0
+      fileCounts.get(fileB) ?? 0,
     );
     results.push({
       fileA,

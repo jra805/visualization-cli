@@ -315,4 +315,106 @@ describe("security-scanner", () => {
       expect(issues[0].severity).toBe("error");
     });
   });
+
+  describe("false positive reduction", () => {
+    it("skips eval in comments", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/utils.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue("// eval(userInput) is dangerous\n");
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("skips eval in block comments", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/utils.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue(
+        "/* eval(userInput) should never be used */\n",
+      );
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("skips eval-like names in import statements", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/main.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue(
+        "import { evaluate } from './utils';\n",
+      );
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("skips type annotations with password field", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/types.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue("  password: string;\n");
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("skips files in fixture directories", () => {
+      const graph = makeGraph({
+        filePath: "/app/tests/__fixtures__/config.ts",
+        language: "typescript",
+        moduleType: "service",
+      });
+      mockedReadFileSync.mockReturnValue('const password = "test12345678";\n');
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("still catches real eval usage", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/exec.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue("const result = eval(userInput);\n");
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe("security-injection");
+    });
+
+    it("skips secrets in comment lines (type definition heuristic)", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/config.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue(
+        '// password = "realSecretValue123"\n',
+      );
+
+      // Comment lines are treated as type-definition context, so secrets in comments are skipped
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(0);
+    });
+
+    it("catches secrets in actual code", () => {
+      const graph = makeGraph({
+        filePath: "/app/src/config.ts",
+        language: "typescript",
+      });
+      mockedReadFileSync.mockReturnValue(
+        'const password = "realSecretValue123";\n',
+      );
+
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe("security-secret");
+    });
+  });
 });

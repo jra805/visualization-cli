@@ -1,6 +1,7 @@
 import type { Graph } from "../graph/types.js";
 import type { ComponentInfo } from "../parser/types.js";
 import type { ArchReport, Issue } from "./types.js";
+import type { AnalysisContext } from "./analysis-context.js";
 import { detectCircularDeps } from "./circular.js";
 import { detectOrphans } from "./orphans.js";
 import { analyzeCoupling } from "./coupling.js";
@@ -16,6 +17,7 @@ import { detectSecurityIssues } from "./security-scanner.js";
 export interface AnalyzeOptions {
   skipIssues?: boolean;
   rootDir?: string;
+  context?: AnalysisContext;
 }
 
 export async function analyze(
@@ -50,6 +52,8 @@ export async function analyze(
   const { orphans } = detectOrphans(graph, entryPoints);
   const architecturePattern = detectArchitecturePattern(graph);
 
+  const ctx = options.context;
+
   const report: ArchReport = {
     totalModules: graph.nodes.size,
     totalEdges: graph.edges.length,
@@ -58,72 +62,110 @@ export async function analyze(
     orphans,
     topCoupled: scores.slice(0, 10),
     architecturePattern,
+    context: ctx,
   };
 
-  // Hotspot detection (requires rootDir with git history)
+  // Git-dependent analysis (requires rootDir with git history)
   if (options.rootDir) {
-    const hotspots = detectHotspots(graph, { rootDir: options.rootDir });
-    report.hotspots = hotspots;
+    // Hotspot detection
+    try {
+      const hotspots = detectHotspots(graph, { rootDir: options.rootDir });
+      report.hotspots = hotspots;
 
-    if (!options.skipIssues) {
-      for (const [filePath, data] of hotspots) {
-        if (data.isHotspot) {
-          issues.push({
-            type: "hotspot",
-            severity: data.hotspotScore >= 0.75 ? "error" : "warning",
-            message: `Hotspot: high complexity (${data.complexity} branches) × frequent changes (${data.changeCount} commits) — score ${data.hotspotScore.toFixed(2)}`,
-            files: [filePath],
-          });
+      if (!options.skipIssues) {
+        for (const [filePath, data] of hotspots) {
+          if (data.isHotspot) {
+            issues.push({
+              type: "hotspot",
+              severity: data.hotspotScore >= 0.75 ? "error" : "warning",
+              message: `Hotspot: high complexity (${data.complexity} branches) × frequent changes (${data.changeCount} commits) — score ${data.hotspotScore.toFixed(2)}`,
+              files: [filePath],
+            });
+          }
         }
       }
+    } catch {
+      ctx?.warnings.push({
+        category: "git",
+        message:
+          "Hotspot analysis failed — git history may be unavailable or too large",
+      });
     }
 
     // Temporal coupling detection
-    const temporalCouplings = detectTemporalCoupling(graph, {
-      rootDir: options.rootDir,
-    });
-    report.temporalCouplings = temporalCouplings;
+    try {
+      const temporalCouplings = detectTemporalCoupling(graph, {
+        rootDir: options.rootDir,
+      });
+      report.temporalCouplings = temporalCouplings;
 
-    if (!options.skipIssues) {
-      for (const tc of temporalCouplings) {
-        issues.push({
-          type: "temporal-coupling",
-          severity: tc.confidence >= 0.8 ? "warning" : "info",
-          message: `Temporal coupling: co-changed ${tc.coChangeCount} times (${(tc.confidence * 100).toFixed(0)}% confidence) with no import`,
-          files: [tc.fileA, tc.fileB],
-        });
+      if (!options.skipIssues) {
+        for (const tc of temporalCouplings) {
+          issues.push({
+            type: "temporal-coupling",
+            severity: tc.confidence >= 0.8 ? "warning" : "info",
+            message: `Temporal coupling: co-changed ${tc.coChangeCount} times (${(tc.confidence * 100).toFixed(0)}% confidence) with no import`,
+            files: [tc.fileA, tc.fileB],
+          });
+        }
       }
+    } catch {
+      ctx?.warnings.push({
+        category: "git",
+        message: "Temporal coupling analysis failed — git history unavailable",
+      });
     }
 
     // Bus factor detection
-    const busFactors = detectBusFactors(graph, options.rootDir);
-    if (!options.skipIssues) {
-      for (const [filePath, data] of busFactors) {
-        if (data.busFactor <= 1 && data.authors.length > 0) {
-          issues.push({
-            type: "bus-factor",
-            severity: "warning",
-            message: `Bus factor = ${data.busFactor}: only ${data.authors[0]?.name ?? "one author"} maintains this file (${data.authors[0]?.commits ?? 0} commits)`,
-            files: [filePath],
-          });
+    try {
+      const busFactors = detectBusFactors(graph, options.rootDir);
+      if (!options.skipIssues) {
+        for (const [filePath, data] of busFactors) {
+          if (data.busFactor <= 1 && data.authors.length > 0) {
+            issues.push({
+              type: "bus-factor",
+              severity: "warning",
+              message: `Bus factor = ${data.busFactor}: only ${data.authors[0]?.name ?? "one author"} maintains this file (${data.authors[0]?.commits ?? 0} commits)`,
+              files: [filePath],
+            });
+          }
         }
       }
+    } catch {
+      ctx?.warnings.push({
+        category: "git",
+        message: "Bus factor analysis failed — git history unavailable",
+      });
     }
 
     // Stale code detection
-    const staleness = detectStaleness(graph, options.rootDir);
-    if (!options.skipIssues) {
-      for (const [filePath, data] of staleness) {
-        if (data.staleLevel === "dusty" || data.staleLevel === "abandoned") {
-          issues.push({
-            type: "stale-code",
-            severity: "info",
-            message: `Stale code: last commit ${data.staleDays} days ago (${data.staleLevel})`,
-            files: [filePath],
-          });
+    try {
+      const staleness = detectStaleness(graph, options.rootDir);
+      if (!options.skipIssues) {
+        for (const [filePath, data] of staleness) {
+          if (data.staleLevel === "dusty" || data.staleLevel === "abandoned") {
+            issues.push({
+              type: "stale-code",
+              severity: "info",
+              message: `Stale code: last commit ${data.staleDays} days ago (${data.staleLevel})`,
+              files: [filePath],
+            });
+          }
         }
       }
+    } catch {
+      ctx?.warnings.push({
+        category: "git",
+        message: "Stale code analysis failed — git history unavailable",
+      });
     }
+  } else if (ctx) {
+    ctx.gitAvailable = false;
+    ctx.warnings.push({
+      category: "git",
+      message:
+        "No project root provided — skipped hotspot, temporal coupling, bus factor, and stale code analysis",
+    });
   }
 
   return report;

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 — Hardening & Beginner UX
+
+### Improvements
+
+- **Analysis context & warnings** — Pipeline now tracks what happened during analysis. Silent failures (git unavailable, ts-morph crashes, parser errors) are surfaced as yellow warnings in CLI output instead of silently returning empty results.
+- **Beginner-friendly issue descriptions** — Every issue type now includes a plain-English explanation and actionable fix suggestion, shown in both the interactive inspector and game map threat log.
+- **CLI summary** — Structured summary after analysis: file count, languages, architecture pattern, issue breakdown by severity, and any warnings about skipped features.
+- **Security scanner false positive reduction** — Skips comment lines, import statements, type annotations, and fixture/mock directories. Fewer noisy results, same real detection.
+- **Output path safety** — Removed `fs.rmSync` on user-provided paths. Now checks for project markers (package.json, .git, src/) before touching directories.
+- **Git buffer increase** — Shared `GIT_MAX_BUFFER` constant bumped from 10MB to 50MB for large monorepos, deduplicated across 4 files.
+- **Documentation fixes** — Corrected output filenames in SETUP.md, added "Understanding Results" section with threshold explanations.
+
+### Tests
+
+- 211 tests (was 195) — new test files for analysis context and issue descriptions, plus 8 security scanner false positive regression tests.
+
+---
+
 ## 0.1.0 — Initial Release
 
 ### Features

@@ -12,6 +12,26 @@ import { generateGameMapHtml } from "./game-map/index.js";
 import { generateTreemapHtml } from "./treemap/index.js";
 import { generateSvg } from "./svg/index.js";
 
+/** Check that an output directory doesn't contain source files before overwriting */
+function assertSafeOutputDir(dirPath: string): void {
+  const PROJECT_MARKERS = [
+    "package.json",
+    ".git",
+    "src",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+  ];
+  for (const marker of PROJECT_MARKERS) {
+    const markerPath = path.join(dirPath, marker);
+    if (fs.statSync(markerPath, { throwIfNoEntry: false })) {
+      throw new Error(
+        `Output path '${dirPath}' appears to contain source files (found ${marker}). Use a different path or specify a file like './output/codescape.html'`,
+      );
+    }
+  }
+}
+
 export async function render(
   graph: Graph,
   report: ArchReport,
@@ -39,10 +59,10 @@ export async function render(
   const isFilePath = [".html", ".svg", ".htm"].includes(ext);
 
   if (isFilePath) {
-    // -o pointed to a file: remove stale directory if one exists, use parent as dir
+    // -o pointed to a file: use parent as dir
     const stat = fs.statSync(options.outputDir, { throwIfNoEntry: false });
     if (stat?.isDirectory()) {
-      fs.rmSync(options.outputDir, { recursive: true });
+      assertSafeOutputDir(options.outputDir);
     }
     outputPath = options.outputDir;
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -52,10 +72,10 @@ export async function render(
     outputPath = path.join(options.outputDir, defaultFilename);
   }
 
-  // If outputPath already exists as a directory (stale from old bug), remove it
+  // If outputPath already exists as a directory (stale from old bug), warn instead of deleting
   const outStat = fs.statSync(outputPath, { throwIfNoEntry: false });
   if (outStat?.isDirectory()) {
-    fs.rmSync(outputPath, { recursive: true });
+    assertSafeOutputDir(outputPath);
   }
 
   if (format === "mermaid") {

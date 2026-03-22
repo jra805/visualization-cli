@@ -170,7 +170,7 @@ const RULES: SecurityRule[] = [
   },
 ];
 
-/** Files to skip: test files, type definitions, env examples, security tooling */
+/** Files to skip: test files, type definitions, env examples, security tooling, fixtures */
 function shouldSkipFile(filePath: string, moduleType: string): boolean {
   if (moduleType === "test") return true;
   if (filePath.endsWith(".d.ts")) return true;
@@ -178,14 +178,33 @@ function shouldSkipFile(filePath: string, moduleType: string): boolean {
     return true;
   // Security analysis tooling contains rule patterns that match their own rules
   if (/security.scanner|security.analyzer/i.test(filePath)) return true;
+  // Test fixtures, mocks, and seed data contain intentional patterns
+  if (
+    /[/\\](?:__fixtures__|fixtures?|__mocks__|test-data|seed)[/\\]/i.test(
+      filePath,
+    )
+  )
+    return true;
   return false;
 }
 
 /** Check if a line is in a type/schema/interface definition context */
 function isTypeDefinition(line: string): boolean {
-  return /^\s*(?:type|interface|export\s+type|export\s+interface|readonly|class\s+\w+.*\{|\*|\/\/|#|--)/i.test(
-    line,
+  return (
+    /^\s*(?:type|interface|export\s+type|export\s+interface|readonly|class\s+\w+.*\{|\*|\/\/|#|--|enum\s)/i.test(
+      line,
+    ) || /:\s*(?:string|number|boolean|\{)/.test(line)
   );
+}
+
+/** Check if a line is a comment */
+function isComment(line: string): boolean {
+  return /^\s*(?:\/\/|#|\/\*|\*|--|--)/.test(line);
+}
+
+/** Check if a line is an import/require statement */
+function isImportLine(line: string): boolean {
+  return /^\s*(?:import\b|from\b|require\s*\()/.test(line);
 }
 
 /** Sanitize match — never show actual secret values */
@@ -241,6 +260,12 @@ export function detectSecurityIssues(graph: Graph): Issue[] {
         }
 
         if (!rule.pattern.test(line)) continue;
+
+        // False positive: comments (still flag commented-out secrets)
+        if (rule.id !== "secret" && isComment(line)) continue;
+
+        // False positive: import/require lines (e.g., `import { evaluate }`)
+        if (rule.id.startsWith("eval") && isImportLine(line)) continue;
 
         // False positive: secret in type definition
         if (rule.id === "secret" && isTypeDefinition(line)) continue;

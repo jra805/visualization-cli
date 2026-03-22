@@ -3,6 +3,7 @@ import type { ArchReport } from "../analyzer/types.js";
 import type { ComponentInfo, ComponentDataFlow } from "../parser/types.js";
 import { serializeGraph } from "./serialize.js";
 import { MODULE_COLORS, LANG_COLORS } from "./shared-colors.js";
+import { getAllIssueDescriptions } from "../analyzer/issue-descriptions.js";
 
 export function generateInteractiveHtml(
   graph: Graph,
@@ -13,6 +14,10 @@ export function generateInteractiveHtml(
   const data = serializeGraph(graph, report, components, dataFlows);
   // Escape </ sequences to prevent premature script tag closure when embedded in HTML
   const jsonData = JSON.stringify(data).replace(/<\//g, "<\\/");
+  const issueDescs = JSON.stringify(getAllIssueDescriptions()).replace(
+    /<\//g,
+    "<\\/",
+  );
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -184,6 +189,17 @@ export function generateInteractiveHtml(
     color: #CF5C5C;
     border-color: #CF5C5C;
   }
+  .inspector .issue-detail {
+    margin: 4px 0 8px 0;
+    padding: 6px 8px;
+    background: #161b22;
+    border-left: 2px solid #CF5C5C;
+    border-radius: 0 4px 4px 0;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .inspector .issue-explain { color: #c9d1d9; }
+  .inspector .issue-suggest { color: #7ee787; margin-top: 3px; }
 
   .footer {
     padding: 8px 20px;
@@ -420,6 +436,7 @@ export function generateInteractiveHtml(
 <div class="footer" id="legend"></div>
 
 <script id="viz-data" type="application/json">${jsonData}</script>
+<script id="issue-descriptions" type="application/json">${issueDescs}</script>
 <script>
 (function() {
   function showError(msg) {
@@ -455,6 +472,11 @@ export function generateInteractiveHtml(
     showError('Failed to parse graph data: ' + e.message);
     return;
   }
+
+  var issueHelp = {};
+  try {
+    issueHelp = JSON.parse(document.getElementById('issue-descriptions').textContent);
+  } catch(e) { /* fallback: no descriptions */ }
 
   if (!raw.nodes || raw.nodes.length === 0) {
     showError('No modules found in graph data.');
@@ -872,15 +894,23 @@ export function generateInteractiveHtml(
     html += '<div class="field"><div class="field-label">Lines of Code</div><div class="field-value">' + nodeData.loc + '</div></div>';
     html += '<div class="field"><div class="field-label">Coupling</div><div class="field-value">Fan-in: ' + nodeData.fanIn + ' / Fan-out: ' + nodeData.fanOut + '</div></div>';
 
-    var issues = [];
-    if (nodeData.isCircular) issues.push('Circular Dependency');
-    if (nodeData.isOrphan) issues.push('Orphan Module');
-    if (nodeData.isGodModule) issues.push('God Module');
-    if (nodeData.isHotspot) issues.push('Hotspot');
-    if (nodeData.hasSecurityIssue) issues.push('Security');
-    if (issues.length > 0) {
+    var issueKeys = [];
+    if (nodeData.isCircular) issueKeys.push('circular-dependency');
+    if (nodeData.isOrphan) issueKeys.push('orphan-module');
+    if (nodeData.isGodModule) issueKeys.push('god-module');
+    if (nodeData.isHotspot) issueKeys.push('hotspot');
+    if (nodeData.hasSecurityIssue) issueKeys.push('security-secret');
+    if (issueKeys.length > 0) {
       html += '<div class="field"><div class="field-label">Issues</div><div class="field-value">';
-      issues.forEach(function(i) { html += '<span class="tag issue-tag">' + i + '</span>'; });
+      issueKeys.forEach(function(key) {
+        var desc = issueHelp[key];
+        var title = desc ? desc.title : key;
+        html += '<span class="tag issue-tag">' + escHtml(title) + '</span>';
+        if (desc) {
+          html += '<div class="issue-detail"><div class="issue-explain">' + escHtml(desc.explanation) + '</div>';
+          html += '<div class="issue-suggest">Fix: ' + escHtml(desc.suggestion) + '</div></div>';
+        }
+      });
       html += '</div></div>';
     }
 

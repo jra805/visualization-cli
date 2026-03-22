@@ -5,6 +5,7 @@ import { scan } from "../scanner/index.js";
 import { parse } from "../parser/index.js";
 import { analyze } from "../analyzer/index.js";
 import { render } from "../renderer/index.js";
+import { createAnalysisContext } from "../analyzer/analysis-context.js";
 
 import type { OutputFormat } from "../renderer/types.js";
 import { applyGrouping } from "../graph/auto-grouper.js";
@@ -27,6 +28,7 @@ export async function analyzeCommand(
 ): Promise<void> {
   const targetDir = path.resolve(dir);
   const outputDir = path.resolve(options.output || targetDir);
+  const context = createAnalysisContext();
 
   // Step 1: Scan
   const scanSpinner = ora("Scanning project...").start();
@@ -62,7 +64,7 @@ export async function analyzeCommand(
   const parseSpinner = ora("Parsing dependencies and components...").start();
   let parseResult;
   try {
-    parseResult = await parse(scanResult);
+    parseResult = await parse(scanResult, context);
     parseSpinner.succeed(
       `Parsed ${parseResult.graph.nodes.size} modules, ${parseResult.parseResult.components.length} components`,
     );
@@ -84,15 +86,11 @@ export async function analyzeCommand(
     parseResult.circularDeps,
     scanResult.entryPoints,
     parseResult.parseResult.components,
-    { skipIssues: options.noIssues, rootDir: targetDir },
+    { skipIssues: options.noIssues, rootDir: targetDir, context },
   );
   analyzeSpinner.succeed(
     `Analysis complete: ${report.issues.length} issues found`,
   );
-
-  if (report.architecturePattern && report.architecturePattern !== "unknown") {
-    console.log(chalk.dim(`  Architecture: ${report.architecturePattern}`));
-  }
 
   // Step 3.5: Optional grouping
   const groupedGraph = applyGrouping(parseResult.graph, {
@@ -143,4 +141,47 @@ export async function analyzeCommand(
     console.error(chalk.red((error as Error).message));
     process.exit(1);
   }
+
+  // Summary
+  console.log("");
+  console.log(chalk.bold("  Analysis Summary"));
+  console.log(chalk.dim("  ────────────────────────────────────"));
+
+  const langNames = scanResult.languages.map((l) => l.language);
+  console.log(
+    `  Files: ${scanResult.files.length} across ${langNames.length} language${langNames.length !== 1 ? "s" : ""} (${langNames.join(", ")})`,
+  );
+
+  if (report.architecturePattern && report.architecturePattern !== "unknown") {
+    console.log(`  Architecture: ${report.architecturePattern}`);
+  }
+
+  if (report.issues.length > 0) {
+    const errors = report.issues.filter((i) => i.severity === "error").length;
+    const warnings = report.issues.filter(
+      (i) => i.severity === "warning",
+    ).length;
+    const infos = report.issues.filter((i) => i.severity === "info").length;
+    const parts: string[] = [];
+    if (errors > 0)
+      parts.push(chalk.red(`${errors} error${errors !== 1 ? "s" : ""}`));
+    if (warnings > 0)
+      parts.push(
+        chalk.yellow(`${warnings} warning${warnings !== 1 ? "s" : ""}`),
+      );
+    if (infos > 0) parts.push(chalk.blue(`${infos} info`));
+    console.log(`  Issues: ${parts.join(chalk.dim(" · "))}`);
+  } else {
+    console.log(chalk.green("  Issues: none found"));
+  }
+
+  // Warnings from analysis context
+  if (context.warnings.length > 0) {
+    console.log("");
+    for (const w of context.warnings) {
+      console.log(chalk.yellow(`  Warning: ${w.message}`));
+    }
+  }
+
+  console.log("");
 }
