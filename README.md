@@ -20,6 +20,13 @@ Analyze any codebase and generate interactive architecture visualizations. Point
 
 ## Quick Start
 
+```bash
+npm install -g codescape-cli
+codescape analyze /path/to/your/project
+```
+
+The output opens automatically in your default browser.
+
 ### Install from source
 
 ```bash
