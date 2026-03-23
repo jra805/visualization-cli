@@ -1,5 +1,6 @@
 import type { GameLocation, BiomeType } from "./node-mapper.js";
 import type { SerializedEdge } from "../serialize.js";
+import type { MapState, MapDiff } from "./map-state.js";
 
 export interface GridState {
   width: number;
@@ -10,18 +11,30 @@ export interface GridState {
     { minX: number; minY: number; maxX: number; maxY: number }
   >;
   biomeZones: { cx: number; cy: number; biome: string; radius: number }[];
+  /** Effective biome zone anchors (fractional 0..1) — saved for persistence */
+  effectiveAnchors: Map<string, { fx: number; fy: number }>;
 }
 
 export function layoutLocations(
   locations: GameLocation[],
   edges: SerializedEdge[],
+  prevState?: MapState | null,
+  diff?: MapDiff | null,
 ): GridState {
   const regions = new Map<
     number,
     { minX: number; minY: number; maxX: number; maxY: number }
   >();
   if (locations.length === 0)
-    return { width: 20, height: 20, regions, biomeZones: [] };
+    return {
+      width: 20,
+      height: 20,
+      regions,
+      biomeZones: [],
+      effectiveAnchors: new Map(),
+    };
+
+  const hasPrevState = prevState && diff;
 
   // Build adjacency
   const adj = new Map<string, Set<string>>();
@@ -138,10 +151,15 @@ export function layoutLocations(
   const biomeCount = zoneOccupants.size;
   // Base factor 9 gives spacious maps; biome diversity adds more room for terrain borders
   const densityFactor = Math.min(13, 9 + biomeCount * 0.5);
-  const gridSize = Math.max(
+  let gridSize = Math.max(
     50,
     Math.min(250, Math.ceil(Math.sqrt(locations.length) * densityFactor)),
   );
+
+  // When we have previous state, never shrink the grid
+  if (hasPrevState) {
+    gridSize = Math.max(gridSize, prevState!.gridWidth, prevState!.gridHeight);
+  }
 
   // ── Scenario-based zone layout ──
   const populatedAnchors: { biome: BiomeType; fx: number; fy: number }[] = [];
@@ -152,144 +170,165 @@ export function layoutLocations(
 
   const effectiveAnchors = new Map<BiomeType, { fx: number; fy: number }>();
 
-  if (populatedAnchors.length <= 1) {
-    // Scenario A: single biome — center everything
-    for (const a of populatedAnchors) {
-      effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.5 });
+  if (hasPrevState && prevState!.biomeZoneAnchors) {
+    // Restore preserved biome anchors from previous state
+    for (const [biomeStr, anchor] of Object.entries(
+      prevState!.biomeZoneAnchors,
+    )) {
+      const biome = biomeStr as BiomeType;
+      if (zoneOccupants.has(biome)) {
+        effectiveAnchors.set(biome, { fx: anchor.fx, fy: anchor.fy });
+      }
     }
-  } else if (populatedAnchors.length === 2) {
-    // Scenario B: two biomes — divide map in half
-    const [a, b] = populatedAnchors;
-    // Check for mountain+coastal vertical arrangement
-    const biomes = new Set([a.biome, b.biome]);
-    if (biomes.has("mountain") && biomes.has("coastal")) {
-      // Mountain top, coastal bottom
-      if (a.biome === "mountain") {
-        effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.35 });
-        effectiveAnchors.set(b.biome, { fx: 0.5, fy: 0.65 });
+    // Compute fresh anchors only for new biomes not in prev state
+    for (const biome of zoneOccupants.keys()) {
+      if (!effectiveAnchors.has(biome)) {
+        const a = BIOME_ZONES[biome];
+        effectiveAnchors.set(biome, { fx: a.fx, fy: a.fy });
+      }
+    }
+  } else {
+    // Fresh layout — compute all anchors from scratch
+    if (populatedAnchors.length <= 1) {
+      // Scenario A: single biome — center everything
+      for (const a of populatedAnchors) {
+        effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.5 });
+      }
+    } else if (populatedAnchors.length === 2) {
+      // Scenario B: two biomes — divide map in half
+      const [a, b] = populatedAnchors;
+      // Check for mountain+coastal vertical arrangement
+      const biomes = new Set([a.biome, b.biome]);
+      if (biomes.has("mountain") && biomes.has("coastal")) {
+        // Mountain top, coastal bottom
+        if (a.biome === "mountain") {
+          effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.35 });
+          effectiveAnchors.set(b.biome, { fx: 0.5, fy: 0.65 });
+        } else {
+          effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.65 });
+          effectiveAnchors.set(b.biome, { fx: 0.5, fy: 0.35 });
+        }
       } else {
-        effectiveAnchors.set(a.biome, { fx: 0.5, fy: 0.65 });
-        effectiveAnchors.set(b.biome, { fx: 0.5, fy: 0.35 });
+        effectiveAnchors.set(a.biome, { fx: 0.35, fy: 0.5 });
+        effectiveAnchors.set(b.biome, { fx: 0.65, fy: 0.5 });
+      }
+    } else if (populatedAnchors.length <= 4) {
+      // Scenario C: 3-4 biomes — proportional compass layout
+      // Sort by node count descending; largest gets center
+      const sorted = [...populatedAnchors].sort((a, b) => {
+        return (
+          (zoneNodeCounts.get(b.biome) ?? 0) -
+          (zoneNodeCounts.get(a.biome) ?? 0)
+        );
+      });
+      // Largest biome at center
+      effectiveAnchors.set(sorted[0].biome, { fx: 0.5, fy: 0.5 });
+
+      // Place remaining around center using affinity
+      const compassPositions: { fx: number; fy: number }[] = [
+        { fx: 0.5, fy: 0.2 }, // north
+        { fx: 0.8, fy: 0.5 }, // east
+        { fx: 0.2, fy: 0.5 }, // west
+        { fx: 0.5, fy: 0.8 }, // south
+      ];
+
+      const usedPositions = new Set<number>();
+      for (let i = 1; i < sorted.length; i++) {
+        const biome = sorted[i].biome;
+        // Find best compass position based on affinity to already-placed biomes
+        let bestPos = 0;
+        let bestScore = -1;
+        for (let p = 0; p < compassPositions.length; p++) {
+          if (usedPositions.has(p)) continue;
+          // Score: prefer positions that have affinity neighbors nearby
+          let score = 0;
+          for (const [ab, bb] of BIOME_AFFINITIES) {
+            if (ab === biome || bb === biome) {
+              const partner = ab === biome ? bb : ab;
+              const partnerAnchor = effectiveAnchors.get(partner);
+              if (partnerAnchor) {
+                const dx = compassPositions[p].fx - partnerAnchor.fx;
+                const dy = compassPositions[p].fy - partnerAnchor.fy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                score += 1 / (dist + 0.1);
+              }
+            }
+          }
+          // Also consider original anchor proximity
+          const origDx = compassPositions[p].fx - BIOME_ZONES[biome].fx;
+          const origDy = compassPositions[p].fy - BIOME_ZONES[biome].fy;
+          score += 0.5 / (Math.sqrt(origDx * origDx + origDy * origDy) + 0.1);
+
+          if (score > bestScore || bestScore < 0) {
+            bestScore = score;
+            bestPos = p;
+          }
+        }
+        usedPositions.add(bestPos);
+        effectiveAnchors.set(biome, compassPositions[bestPos]);
       }
     } else {
-      effectiveAnchors.set(a.biome, { fx: 0.35, fy: 0.5 });
-      effectiveAnchors.set(b.biome, { fx: 0.65, fy: 0.5 });
+      // Scenario D: 5+ biomes — remap anchors with minimum distance guarantee
+      let minFx = 1,
+        maxFx = 0,
+        minFy = 1,
+        maxFy = 0;
+      for (const a of populatedAnchors) {
+        minFx = Math.min(minFx, a.fx);
+        maxFx = Math.max(maxFx, a.fx);
+        minFy = Math.min(minFy, a.fy);
+        maxFy = Math.max(maxFy, a.fy);
+      }
+      const targetMin = 0.12;
+      const targetMax = 0.88;
+      const rangeFx = maxFx - minFx || 1;
+      const rangeFy = maxFy - minFy || 1;
+      for (const a of populatedAnchors) {
+        effectiveAnchors.set(a.biome, {
+          fx: targetMin + ((a.fx - minFx) / rangeFx) * (targetMax - targetMin),
+          fy: targetMin + ((a.fy - minFy) / rangeFy) * (targetMax - targetMin),
+        });
+      }
     }
-  } else if (populatedAnchors.length <= 4) {
-    // Scenario C: 3-4 biomes — proportional compass layout
-    // Sort by node count descending; largest gets center
-    const sorted = [...populatedAnchors].sort((a, b) => {
-      return (
-        (zoneNodeCounts.get(b.biome) ?? 0) - (zoneNodeCounts.get(a.biome) ?? 0)
-      );
-    });
-    // Largest biome at center
-    effectiveAnchors.set(sorted[0].biome, { fx: 0.5, fy: 0.5 });
 
-    // Place remaining around center using affinity
-    const compassPositions: { fx: number; fy: number }[] = [
-      { fx: 0.5, fy: 0.2 }, // north
-      { fx: 0.8, fy: 0.5 }, // east
-      { fx: 0.2, fy: 0.5 }, // west
-      { fx: 0.5, fy: 0.8 }, // south
-    ];
-
-    const usedPositions = new Set<number>();
-    for (let i = 1; i < sorted.length; i++) {
-      const biome = sorted[i].biome;
-      // Find best compass position based on affinity to already-placed biomes
-      let bestPos = 0;
-      let bestScore = -1;
-      for (let p = 0; p < compassPositions.length; p++) {
-        if (usedPositions.has(p)) continue;
-        // Score: prefer positions that have affinity neighbors nearby
-        let score = 0;
-        for (const [ab, bb] of BIOME_AFFINITIES) {
-          if (ab === biome || bb === biome) {
-            const partner = ab === biome ? bb : ab;
-            const partnerAnchor = effectiveAnchors.get(partner);
-            if (partnerAnchor) {
-              const dx = compassPositions[p].fx - partnerAnchor.fx;
-              const dy = compassPositions[p].fy - partnerAnchor.fy;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              score += 1 / (dist + 0.1);
+    // ── Zone separation enforcement (scenarios B-D) ──
+    if (populatedAnchors.length >= 2) {
+      const usableFrac = 0.76; // targetMax - targetMin
+      const minSep = usableFrac * 0.15;
+      const anchorsArr = [...effectiveAnchors.entries()];
+      // Iterate a few times to resolve overlaps
+      for (let iter = 0; iter < 5; iter++) {
+        let moved = false;
+        for (let i = 0; i < anchorsArr.length; i++) {
+          for (let j = i + 1; j < anchorsArr.length; j++) {
+            const ai = anchorsArr[i][1];
+            const aj = anchorsArr[j][1];
+            const dx = aj.fx - ai.fx;
+            const dy = aj.fy - ai.fy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < minSep && dist > 0) {
+              const push = (minSep - dist) / 2;
+              const nx = dx / dist,
+                ny = dy / dist;
+              ai.fx -= nx * push;
+              ai.fy -= ny * push;
+              aj.fx += nx * push;
+              aj.fy += ny * push;
+              // Clamp to [0.08..0.92]
+              ai.fx = Math.max(0.08, Math.min(0.92, ai.fx));
+              ai.fy = Math.max(0.08, Math.min(0.92, ai.fy));
+              aj.fx = Math.max(0.08, Math.min(0.92, aj.fx));
+              aj.fy = Math.max(0.08, Math.min(0.92, aj.fy));
+              moved = true;
             }
           }
         }
-        // Also consider original anchor proximity
-        const origDx = compassPositions[p].fx - BIOME_ZONES[biome].fx;
-        const origDy = compassPositions[p].fy - BIOME_ZONES[biome].fy;
-        score += 0.5 / (Math.sqrt(origDx * origDx + origDy * origDy) + 0.1);
-
-        if (score > bestScore || bestScore < 0) {
-          bestScore = score;
-          bestPos = p;
-        }
+        if (!moved) break;
       }
-      usedPositions.add(bestPos);
-      effectiveAnchors.set(biome, compassPositions[bestPos]);
-    }
-  } else {
-    // Scenario D: 5+ biomes — remap anchors with minimum distance guarantee
-    let minFx = 1,
-      maxFx = 0,
-      minFy = 1,
-      maxFy = 0;
-    for (const a of populatedAnchors) {
-      minFx = Math.min(minFx, a.fx);
-      maxFx = Math.max(maxFx, a.fx);
-      minFy = Math.min(minFy, a.fy);
-      maxFy = Math.max(maxFy, a.fy);
-    }
-    const targetMin = 0.12;
-    const targetMax = 0.88;
-    const rangeFx = maxFx - minFx || 1;
-    const rangeFy = maxFy - minFy || 1;
-    for (const a of populatedAnchors) {
-      effectiveAnchors.set(a.biome, {
-        fx: targetMin + ((a.fx - minFx) / rangeFx) * (targetMax - targetMin),
-        fy: targetMin + ((a.fy - minFy) / rangeFy) * (targetMax - targetMin),
-      });
-    }
-  }
-
-  // ── Zone separation enforcement (scenarios B-D) ──
-  if (populatedAnchors.length >= 2) {
-    const usableFrac = 0.76; // targetMax - targetMin
-    const minSep = usableFrac * 0.15;
-    const anchorsArr = [...effectiveAnchors.entries()];
-    // Iterate a few times to resolve overlaps
-    for (let iter = 0; iter < 5; iter++) {
-      let moved = false;
-      for (let i = 0; i < anchorsArr.length; i++) {
-        for (let j = i + 1; j < anchorsArr.length; j++) {
-          const ai = anchorsArr[i][1];
-          const aj = anchorsArr[j][1];
-          const dx = aj.fx - ai.fx;
-          const dy = aj.fy - ai.fy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < minSep && dist > 0) {
-            const push = (minSep - dist) / 2;
-            const nx = dx / dist,
-              ny = dy / dist;
-            ai.fx -= nx * push;
-            ai.fy -= ny * push;
-            aj.fx += nx * push;
-            aj.fy += ny * push;
-            // Clamp to [0.08..0.92]
-            ai.fx = Math.max(0.08, Math.min(0.92, ai.fx));
-            ai.fy = Math.max(0.08, Math.min(0.92, ai.fy));
-            aj.fx = Math.max(0.08, Math.min(0.92, aj.fx));
-            aj.fy = Math.max(0.08, Math.min(0.92, aj.fy));
-            moved = true;
-          }
-        }
+      // Write back
+      for (const [biome, anchor] of anchorsArr) {
+        effectiveAnchors.set(biome, anchor);
       }
-      if (!moved) break;
-    }
-    // Write back
-    for (const [biome, anchor] of anchorsArr) {
-      effectiveAnchors.set(biome, anchor);
     }
   }
 
@@ -412,6 +451,31 @@ export function layoutLocations(
   }
 
   const placedPos = new Map<string, [number, number]>();
+
+  // ── Incremental: pre-place retained nodes from previous state ──
+  const newNodeIds = new Set<string>();
+  if (hasPrevState) {
+    for (const loc of locations) {
+      const prevPos = diff!.retained.get(loc.id);
+      if (prevPos) {
+        // Validate position is within current grid bounds
+        const gx = Math.max(
+          1,
+          Math.min(gridSize - loc.tileSize - 1, prevPos.gridX),
+        );
+        const gy = Math.max(
+          1,
+          Math.min(gridSize - loc.tileSize - 1, prevPos.gridY),
+        );
+        loc.gridX = gx;
+        loc.gridY = gy;
+        markOccupied(gx, gy, loc.tileSize);
+        placedPos.set(loc.id, [gx, gy]);
+      } else {
+        newNodeIds.add(loc.id);
+      }
+    }
+  }
 
   // ── Neighborhood helpers ──
 
@@ -583,35 +647,47 @@ export function layoutLocations(
       return b.importance - a.importance;
     });
 
+    // When incremental, only place new nodes (retained are already placed)
+    const membersToPlace = hasPrevState
+      ? members.filter((m) => newNodeIds.has(m.id))
+      : members;
+
     // Separate orphans from non-orphans
-    const nonOrphans = members.filter((m) => !m.isOrphan);
-    const orphans = members.filter((m) => m.isOrphan);
+    const nonOrphans = membersToPlace.filter((m) => !m.isOrphan);
+    const orphans = membersToPlace.filter((m) => m.isOrphan);
 
-    // Scale factor proportional to community size
-    const scaleFactor = Math.max(1, Math.sqrt(nonOrphans.length) / 4);
+    // Scale factor based on full community size (not just new nodes)
+    const allNonOrphans = members.filter((m) => !m.isOrphan);
+    const scaleFactor = Math.max(1, Math.sqrt(allNonOrphans.length) / 4);
 
-    // Split non-orphans into biome-based neighborhoods
-    const neighborhoods = groupByBiome(nonOrphans);
-    const neighborhoodAnchors = computeNeighborhoodAnchors(
-      neighborhoods,
-      regionPos.cx,
-      regionPos.cy,
-      regionPos.radius,
-    );
+    if (hasPrevState && nonOrphans.length > 0) {
+      // Incremental placement: anchor new nodes near retained community members
+      const retainedInCommunity = members.filter((m) => !newNodeIds.has(m.id));
+      let anchorCx = regionPos.cx;
+      let anchorCy = regionPos.cy;
 
-    // Place each neighborhood using its biome-specific pattern
-    for (const [biome, locs] of neighborhoods) {
-      const anchor = neighborhoodAnchors.get(biome)!;
-      for (let i = 0; i < locs.length; i++) {
-        const loc = locs[i];
+      if (retainedInCommunity.length > 0) {
+        // Use centroid of retained nodes as anchor for new placements
+        anchorCx = Math.round(
+          retainedInCommunity.reduce((s, m) => s + m.gridX, 0) /
+            retainedInCommunity.length,
+        );
+        anchorCy = Math.round(
+          retainedInCommunity.reduce((s, m) => s + m.gridY, 0) /
+            retainedInCommunity.length,
+        );
+      }
 
-        // Get biome-pattern target position
+      for (let i = 0; i < nonOrphans.length; i++) {
+        const loc = nonOrphans[i];
+
+        // Target: biome-pattern position anchored on retained centroid
         let [tx, ty] = getBiomeSettlementPosition(
-          biome,
+          loc.biome,
           i,
-          locs.length,
-          anchor.ax,
-          anchor.ay,
+          nonOrphans.length,
+          anchorCx,
+          anchorCy,
           scaleFactor,
         );
 
@@ -643,9 +719,64 @@ export function layoutLocations(
         markOccupied(px, py, loc.tileSize);
         placedPos.set(loc.id, [px, py]);
       }
+    } else if (!hasPrevState) {
+      // Fresh layout: full neighborhood-based placement
+      const neighborhoods = groupByBiome(nonOrphans);
+      const neighborhoodAnchors = computeNeighborhoodAnchors(
+        neighborhoods,
+        regionPos.cx,
+        regionPos.cy,
+        regionPos.radius,
+      );
+
+      // Place each neighborhood using its biome-specific pattern
+      for (const [biome, locs] of neighborhoods) {
+        const anchor = neighborhoodAnchors.get(biome)!;
+        for (let i = 0; i < locs.length; i++) {
+          const loc = locs[i];
+
+          // Get biome-pattern target position
+          let [tx, ty] = getBiomeSettlementPosition(
+            biome,
+            i,
+            locs.length,
+            anchor.ax,
+            anchor.ay,
+            scaleFactor,
+          );
+
+          // Blend with neighbor-pull: 70% pattern / 30% neighbor pull
+          const neighbors = adj.get(loc.id);
+          const connectedPos: [number, number][] = [];
+          if (neighbors) {
+            for (const nid of neighbors) {
+              const pos = placedPos.get(nid);
+              if (pos) connectedPos.push(pos);
+            }
+          }
+          if (connectedPos.length > 0) {
+            const avgX =
+              connectedPos.reduce((s, p) => s + p[0], 0) / connectedPos.length;
+            const avgY =
+              connectedPos.reduce((s, p) => s + p[1], 0) / connectedPos.length;
+            tx = Math.round(tx * 0.7 + avgX * 0.3);
+            ty = Math.round(ty * 0.7 + avgY * 0.3);
+          }
+
+          // Clamp
+          tx = Math.max(2, Math.min(gridSize - loc.tileSize - 2, tx));
+          ty = Math.max(2, Math.min(gridSize - loc.tileSize - 2, ty));
+
+          const [px, py] = findNearest(tx, ty, loc.tileSize);
+          loc.gridX = px;
+          loc.gridY = py;
+          markOccupied(px, py, loc.tileSize);
+          placedPos.set(loc.id, [px, py]);
+        }
+      }
     }
 
-    // Orphans pushed to the outskirts (unchanged)
+    // Orphans pushed to the outskirts
     for (let oi = 0; oi < orphans.length; oi++) {
       const loc = orphans[oi];
       const angle = oi * 2.4;
@@ -664,39 +795,50 @@ export function layoutLocations(
     }
   }
 
-  // ── Post-layout compaction ──
-  let minBX = gridSize,
-    minBY = gridSize,
-    maxBX = 0,
-    maxBY = 0;
-  for (const loc of locations) {
-    minBX = Math.min(minBX, loc.gridX);
-    minBY = Math.min(minBY, loc.gridY);
-    maxBX = Math.max(maxBX, loc.gridX + loc.tileSize);
-    maxBY = Math.max(maxBY, loc.gridY + loc.tileSize);
-  }
+  // ── Post-layout compaction (skip when preserving positions) ──
+  let shiftX = 0;
+  let shiftY = 0;
+  let finalW: number;
+  let finalH: number;
 
-  // Padding scales with biome diversity
-  const compactPad =
-    biomeCount <= 1 ? 5 : biomeCount >= 5 ? 10 : 5 + biomeCount;
-
-  // Shift all locations to remove dead space
-  const shiftX = Math.max(0, minBX - compactPad);
-  const shiftY = Math.max(0, minBY - compactPad);
-  if (shiftX > 0 || shiftY > 0) {
+  if (hasPrevState) {
+    // No compaction — preserve exact positions from previous state
+    finalW = gridSize;
+    finalH = gridSize;
+  } else {
+    let minBX = gridSize,
+      minBY = gridSize,
+      maxBX = 0,
+      maxBY = 0;
     for (const loc of locations) {
-      loc.gridX -= shiftX;
-      loc.gridY -= shiftY;
+      minBX = Math.min(minBX, loc.gridX);
+      minBY = Math.min(minBY, loc.gridY);
+      maxBX = Math.max(maxBX, loc.gridX + loc.tileSize);
+      maxBY = Math.max(maxBY, loc.gridY + loc.tileSize);
     }
-  }
 
-  // Shrink grid to fit content
-  const compactW = Math.max(50, maxBX - shiftX + compactPad);
-  const compactH = Math.max(50, maxBY - shiftY + compactPad);
-  // Don't shrink too aggressively — keep at least 70% of planned size for terrain breathing room
-  const minRetain = Math.floor(gridSize * 0.7);
-  const finalW = Math.max(minRetain, Math.min(gridSize, compactW));
-  const finalH = Math.max(minRetain, Math.min(gridSize, compactH));
+    // Padding scales with biome diversity
+    const compactPad =
+      biomeCount <= 1 ? 5 : biomeCount >= 5 ? 10 : 5 + biomeCount;
+
+    // Shift all locations to remove dead space
+    shiftX = Math.max(0, minBX - compactPad);
+    shiftY = Math.max(0, minBY - compactPad);
+    if (shiftX > 0 || shiftY > 0) {
+      for (const loc of locations) {
+        loc.gridX -= shiftX;
+        loc.gridY -= shiftY;
+      }
+    }
+
+    // Shrink grid to fit content
+    const compactW = Math.max(50, maxBX - shiftX + compactPad);
+    const compactH = Math.max(50, maxBY - shiftY + compactPad);
+    // Don't shrink too aggressively — keep at least 70% of planned size for terrain breathing room
+    const minRetain = Math.floor(gridSize * 0.7);
+    finalW = Math.max(minRetain, Math.min(gridSize, compactW));
+    finalH = Math.max(minRetain, Math.min(gridSize, compactH));
+  }
 
   // ── Build biomeZones array ──
   const biomeZones: {
@@ -734,5 +876,17 @@ export function layoutLocations(
     });
   }
 
-  return { width: finalW, height: finalH, regions, biomeZones };
+  // Convert effectiveAnchors to string-keyed map for the return type
+  const anchorsOut = new Map<string, { fx: number; fy: number }>();
+  for (const [biome, anchor] of effectiveAnchors) {
+    anchorsOut.set(biome, anchor);
+  }
+
+  return {
+    width: finalW,
+    height: finalH,
+    regions,
+    biomeZones,
+    effectiveAnchors: anchorsOut,
+  };
 }

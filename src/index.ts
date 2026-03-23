@@ -31,6 +31,14 @@ program
   .option("--group", "Auto-group files by directory and module type")
   .option("--group-config <path>", "Path to JSON group configuration file")
   .option("-v, --verbose", "Verbose logging")
+  .option(
+    "--fresh",
+    "Ignore saved map state and regenerate from scratch (game format only)",
+  )
+  .option(
+    "--no-persist",
+    "Do not save map state after rendering (game format only)",
+  )
   .action(async (dir, options) => {
     await analyzeCommand(dir, options);
   });

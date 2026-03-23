@@ -1621,6 +1621,12 @@ canvas#minimap {
       ctx.shadowBlur = 8 + Math.sin(animFrame * 0.15) * 4;
     }
 
+    // New node: green glow (pulsing)
+    if (loc.isNew) {
+      ctx.shadowColor = "#44dd66";
+      ctx.shadowBlur = 6 + Math.sin(animFrame * 0.12) * 3;
+    }
+
     // Draw based on size + module type (lens-aware colors)
     var mt = loc.moduleType || "unknown";
     var lc = getLensColors(loc);
@@ -1662,6 +1668,21 @@ canvas#minimap {
       ctx.fillRect(Math.floor(cw / 2) - 3, -8, 2, 2);
       ctx.fillRect(Math.floor(cw / 2) + 1, -8, 2, 2);
       ctx.fillRect(Math.floor(cw / 2) - 1, -9, 2, 2);
+    }
+
+    // New node: green sparkle star marker
+    if (loc.isNew) {
+      var nw = loc.tileSize * TILE;
+      var sparkAlpha = 0.6 + Math.sin(animFrame * 0.15) * 0.3;
+      ctx.globalAlpha = sparkAlpha;
+      ctx.fillStyle = "#44dd66";
+      // 4-point star above building
+      var sx = Math.floor(nw / 2);
+      ctx.fillRect(sx, -7, 1, 5);
+      ctx.fillRect(sx - 2, -5, 5, 1);
+      ctx.fillRect(sx - 1, -6, 3, 1);
+      ctx.fillRect(sx - 1, -4, 3, 1);
+      ctx.globalAlpha = 1;
     }
 
     // Bridge (articulation point) marker: blue diamond

@@ -3,6 +3,8 @@ export interface RenderOptions {
   verbose?: boolean;
   format?: OutputFormat;
   targetDir?: string;
+  fresh?: boolean;
+  noPersist?: boolean;
 }
 
 export type OutputFormat =

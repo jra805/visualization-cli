@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0 — Persistent Evolving Map
+
+### Features
+
+- **Living game map** — The game map now persists between runs. Existing buildings stay in place, new files appear near their community with a green glow, removed files disappear. The map grows with your project instead of regenerating from scratch.
+- **Map state persistence** — Layout state (positions, communities, terrain seed, biome anchors) saved to `.codescape/map-state.json`. Automatic on game format runs.
+- **Seeded community detection** — Label propagation seeded with previous community assignments for stable groupings across runs. New nodes inherit their neighbor's community.
+- **Rename detection** — Moved/renamed files keep their map position via fuzzy matching (basename + directory similarity).
+- **New node indicators** — New buildings get a pulsing green glow and sparkle star marker so you can see what changed at a glance.
+- **CLI flags** — `--fresh` to force full map regeneration, `--no-persist` to skip saving state.
+
+### Tests
+
+- 236 tests (was 211) — 25 new tests covering state persistence, diff logic, rename detection, seeded communities, position preservation, and grid stability.
+
+---
+
 ## 0.2.0 — Hardening & Beginner UX
 
 ### Improvements

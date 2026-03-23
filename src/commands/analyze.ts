@@ -20,6 +20,8 @@ export interface AnalyzeOptions {
   group?: boolean;
   groupConfig?: string;
   verbose?: boolean;
+  fresh?: boolean;
+  noPersist?: boolean;
 }
 
 export async function analyzeCommand(
@@ -116,7 +118,14 @@ export async function analyzeCommand(
       report,
       parseResult.parseResult.components,
       parseResult.parseResult.dataFlows,
-      { outputDir, verbose: options.verbose, format: options.format },
+      {
+        outputDir,
+        verbose: options.verbose,
+        format: options.format,
+        targetDir,
+        fresh: options.fresh,
+        noPersist: options.noPersist,
+      },
     );
     const ext = path.extname(outputDir).toLowerCase();
     const isFilePath = [".html", ".svg", ".htm"].includes(ext);

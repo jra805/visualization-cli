@@ -9,6 +9,8 @@ import { generateMermaidDiagrams } from "./mermaid/index.js";
 import { generateHtml } from "./html.js";
 import { generateInteractiveHtml } from "./interactive-html.js";
 import { generateGameMapHtml } from "./game-map/index.js";
+import type { MapState } from "./game-map/map-state.js";
+import { loadMapState, saveMapState } from "./game-map/map-state.js";
 import { generateTreemapHtml } from "./treemap/index.js";
 import { generateSvg } from "./svg/index.js";
 
@@ -88,8 +90,20 @@ export async function render(
     const html = generateHtml(diagrams, report);
     fs.writeFileSync(outputPath, html, "utf-8");
   } else if (format === "game") {
-    const html = generateGameMapHtml(graph, report, components, dataFlows);
+    const mapState = options.fresh
+      ? null
+      : loadMapState(options.targetDir ?? ".");
+    const { html, newState } = generateGameMapHtml(
+      graph,
+      report,
+      components,
+      dataFlows,
+      mapState,
+    );
     fs.writeFileSync(outputPath, html, "utf-8");
+    if (!options.noPersist) {
+      saveMapState(options.targetDir ?? ".", newState);
+    }
   } else if (format === "treemap") {
     const html = generateTreemapHtml(graph, report);
     fs.writeFileSync(outputPath, html, "utf-8");

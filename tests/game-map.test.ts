@@ -592,7 +592,7 @@ describe("game-map", () => {
     it("generates valid self-contained HTML", () => {
       const graph = makeTestGraph();
       const report = makeReport();
-      const html = generateGameMapHtml(graph, report, [], []);
+      const { html } = generateGameMapHtml(graph, report, [], []);
 
       expect(html).toContain("<!DOCTYPE html>");
       expect(html).toContain("</html>");
@@ -607,7 +607,7 @@ describe("game-map", () => {
 
     it("contains no external script or stylesheet references", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       // No CDN/external references
       expect(html).not.toContain('src="http');
@@ -619,7 +619,7 @@ describe("game-map", () => {
 
     it("embeds valid JSON data blob", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       const match = html.match(
         /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,
@@ -636,7 +636,7 @@ describe("game-map", () => {
 
     it("contains threat sprite functions in HTML output", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       expect(html).toContain("drawSkullMarker");
       expect(html).toContain("drawCorruptionFog");
@@ -672,7 +672,7 @@ describe("game-map", () => {
           },
         ],
       });
-      const html = generateGameMapHtml(graph, report, [], []);
+      const { html } = generateGameMapHtml(graph, report, [], []);
 
       expect(html).toContain("1 attacks");
       expect(html).toContain("1 deteriorating");
@@ -681,7 +681,7 @@ describe("game-map", () => {
 
     it("contains health badge and threat log elements", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       expect(html).toContain("health-badge");
       expect(html).toContain("health-score");
@@ -728,7 +728,7 @@ describe("game-map", () => {
         ],
       });
 
-      const html = generateGameMapHtml(graph, report, [], []);
+      const { html } = generateGameMapHtml(graph, report, [], []);
       const match = html.match(
         /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,
       );
@@ -749,7 +749,7 @@ describe("game-map", () => {
 
     it("renders violation path styling in HTML", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       expect(html).toContain("VIOLATION_COLOR");
       expect(html).toContain("isViolation");
@@ -757,7 +757,7 @@ describe("game-map", () => {
 
     it("contains threat severity filter buttons", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       expect(html).toContain('data-sev="error"');
       expect(html).toContain('data-sev="warning"');
@@ -779,7 +779,7 @@ describe("game-map", () => {
         directory: "src",
       });
 
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
 
       // Malicious content should only appear inside <script type="application/json">
       // (which browsers do NOT parse as HTML), never as raw HTML attributes or content.
@@ -818,7 +818,7 @@ describe("game-map", () => {
 
     it("contains arch-pattern element in HTML output", () => {
       const graph = makeTestGraph();
-      const html = generateGameMapHtml(graph, makeReport(), [], []);
+      const { html } = generateGameMapHtml(graph, makeReport(), [], []);
       expect(html).toContain('id="arch-pattern"');
       expect(html).toContain("archPatternNames");
     });
@@ -826,7 +826,7 @@ describe("game-map", () => {
     it("passes architecturePattern in game data", () => {
       const graph = makeTestGraph();
       const report = makeReport({ architecturePattern: "mvc" });
-      const html = generateGameMapHtml(graph, report, [], []);
+      const { html } = generateGameMapHtml(graph, report, [], []);
 
       const match = html.match(
         /<script id="game-data" type="application\/json">([\s\S]*?)<\/script>/,

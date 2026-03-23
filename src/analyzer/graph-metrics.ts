@@ -40,7 +40,7 @@ function computePageRank(
   adj: Map<string, string[]>,
   damping = 0.85,
   maxIter = 50,
-  tolerance = 1e-6
+  tolerance = 1e-6,
 ): Map<string, number> {
   const nodes = [...adj.keys()];
   const N = nodes.length;
@@ -57,10 +57,10 @@ function computePageRank(
     for (const [node, neighbors] of adj) {
       if (neighbors.length === 0) {
         // Dangling node: distribute to all
-        const share = damping * ranks.get(node)! / N;
+        const share = (damping * ranks.get(node)!) / N;
         for (const n of nodes) newRanks.set(n, newRanks.get(n)! + share);
       } else {
-        const share = damping * ranks.get(node)! / neighbors.length;
+        const share = (damping * ranks.get(node)!) / neighbors.length;
         for (const nb of neighbors) {
           if (newRanks.has(nb)) newRanks.set(nb, newRanks.get(nb)! + share);
         }
@@ -81,16 +81,65 @@ function computePageRank(
   return ranks;
 }
 
-// ── Label Propagation (deterministic) ──
+// ── Label Propagation (deterministic, optionally seeded) ──
 function computeCommunities(
   undirected: Map<string, Set<string>>,
-  maxIter = 20
+  maxIter = 20,
+  seedLabels?: Map<string, number>,
 ): { communities: Map<string, number>; count: number } {
   const nodes = [...undirected.keys()];
   const labels = new Map<string, number>();
-  nodes.forEach((n, i) => labels.set(n, i));
+  const isSeeded = seedLabels && seedLabels.size > 0;
 
-  for (let iter = 0; iter < maxIter; iter++) {
+  if (isSeeded) {
+    // Use previous community labels as starting point for stability
+    // Find max existing label to avoid collisions with fresh labels
+    let maxLabel = -1;
+    for (const lbl of seedLabels!.values()) {
+      if (lbl > maxLabel) maxLabel = lbl;
+    }
+    let nextLabel = maxLabel + 1;
+
+    for (const n of nodes) {
+      if (seedLabels!.has(n)) {
+        labels.set(n, seedLabels!.get(n)!);
+      } else {
+        // New node: adopt most-connected neighbor's label, or get a fresh one
+        const neighbors = undirected.get(n);
+        if (neighbors && neighbors.size > 0) {
+          const freq = new Map<number, number>();
+          for (const nb of neighbors) {
+            if (seedLabels!.has(nb)) {
+              const lbl = seedLabels!.get(nb)!;
+              freq.set(lbl, (freq.get(lbl) ?? 0) + 1);
+            }
+          }
+          if (freq.size > 0) {
+            let bestLbl = nextLabel;
+            let bestCount = 0;
+            for (const [lbl, count] of freq) {
+              if (count > bestCount) {
+                bestCount = count;
+                bestLbl = lbl;
+              }
+            }
+            labels.set(n, bestLbl);
+          } else {
+            labels.set(n, nextLabel++);
+          }
+        } else {
+          labels.set(n, nextLabel++);
+        }
+      }
+    }
+  } else {
+    nodes.forEach((n, i) => labels.set(n, i));
+  }
+
+  // Reduce iterations when seeded — starting state is already close
+  const effectiveMaxIter = isSeeded ? Math.min(maxIter, 10) : maxIter;
+
+  for (let iter = 0; iter < effectiveMaxIter; iter++) {
     let changed = false;
     // Deterministic order: sort by node id
     const sorted = [...nodes].sort();
@@ -107,14 +156,22 @@ function computeCommunities(
 
       let maxCount = 0;
       let bestLabel = labels.get(node)!;
+      const currentLabel = labels.get(node)!;
       for (const [lbl, count] of freq) {
-        if (count > maxCount || (count === maxCount && lbl < bestLabel)) {
+        if (count > maxCount) {
           maxCount = count;
           bestLabel = lbl;
+        } else if (count === maxCount) {
+          // Label inertia when seeded: on ties, prefer current label
+          if (isSeeded && lbl === currentLabel) {
+            bestLabel = currentLabel;
+          } else if (lbl < bestLabel) {
+            bestLabel = lbl;
+          }
         }
       }
 
-      if (bestLabel !== labels.get(node)) {
+      if (bestLabel !== currentLabel) {
         labels.set(node, bestLabel);
         changed = true;
       }
@@ -136,7 +193,10 @@ function computeCommunities(
 }
 
 // ── Layer Detection (dependency depth via DAG longest path) ──
-function computeLayers(adj: Map<string, string[]>): { layers: Map<string, number>; maxLayer: number } {
+function computeLayers(adj: Map<string, string[]>): {
+  layers: Map<string, number>;
+  maxLayer: number;
+} {
   const memo = new Map<string, number>();
   const visiting = new Set<string>(); // cycle guard
 
@@ -224,7 +284,9 @@ function computeBetweenness(adj: Map<string, string[]>): Map<string, number> {
 }
 
 // ── Articulation Points ──
-function computeArticulationPoints(undirected: Map<string, Set<string>>): Set<string> {
+function computeArticulationPoints(
+  undirected: Map<string, Set<string>>,
+): Set<string> {
   const visited = new Set<string>();
   const disc = new Map<string, number>();
   const low = new Map<string, number>();
@@ -265,12 +327,19 @@ function computeArticulationPoints(undirected: Map<string, Set<string>>): Set<st
 }
 
 // ── Main Entry Point ──
-export function computeGraphMetrics(graph: Graph): GraphMetrics {
+export function computeGraphMetrics(
+  graph: Graph,
+  previousCommunities?: Map<string, number>,
+): GraphMetrics {
   const adj = buildAdjacency(graph);
   const undirected = buildUndirected(graph);
 
   const pageRank = computePageRank(adj);
-  const { communities, count: communityCount } = computeCommunities(undirected);
+  const { communities, count: communityCount } = computeCommunities(
+    undirected,
+    20,
+    previousCommunities,
+  );
   const { layers, maxLayer } = computeLayers(adj);
   const betweenness = computeBetweenness(adj);
   const articulationPoints = computeArticulationPoints(undirected);

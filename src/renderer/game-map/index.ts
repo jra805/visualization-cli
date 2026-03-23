@@ -12,27 +12,76 @@ import {
   clearBuildingTerrain,
 } from "./world-builder.js";
 import { buildGameMapHtml } from "./template.js";
+import type { MapState } from "./map-state.js";
+import { diffNodes, buildMapState } from "./map-state.js";
+
+export interface GameMapResult {
+  html: string;
+  newState: MapState;
+}
 
 export function generateGameMapHtml(
   graph: Graph,
   report: ArchReport,
   components: ComponentInfo[],
   dataFlows: ComponentDataFlow[],
-): string {
+  prevState?: MapState | null,
+): GameMapResult {
   const data = serializeGraph(graph, report, components, dataFlows);
 
-  // Compute graph metrics for smart mapping
-  const metrics = computeGraphMetrics(graph);
+  // Extract previous community labels for seeded community detection
+  let previousCommunities: Map<string, number> | undefined;
+  if (prevState) {
+    previousCommunities = new Map<string, number>();
+    for (const [filePath, node] of Object.entries(prevState.nodes)) {
+      previousCommunities.set(filePath, node.community);
+    }
+  }
+
+  // Compute graph metrics for smart mapping (with seeded communities if available)
+  const metrics = computeGraphMetrics(graph, previousCommunities);
 
   // Server-side computation with metrics-driven mapping
   const locations = mapNodesToLocations(data.nodes, metrics, report.issues);
-  const grid = layoutLocations(locations, data.edges);
+
+  // Diff against previous state
+  const diff = prevState
+    ? diffNodes(
+        prevState,
+        locations.map((l) => l.id),
+      )
+    : null;
+
+  // Set firstSeen and isNew based on diff
+  const now = new Date().toISOString();
+  for (const loc of locations) {
+    if (diff) {
+      const retained = diff.retained.get(loc.id);
+      if (retained) {
+        loc.firstSeen = retained.firstSeen;
+        loc.isNew = false;
+      } else {
+        loc.firstSeen = now;
+        loc.isNew = true;
+      }
+    } else {
+      loc.firstSeen = now;
+      loc.isNew = false; // first run — everything is "baseline", not "new"
+    }
+  }
+
+  const grid = layoutLocations(locations, data.edges, prevState, diff);
+
+  // Determine terrain seed: reuse from previous state or generate fresh
+  const terrainSeed =
+    prevState?.terrainSeed ?? locations.length * 7 + grid.width * 13;
+
   const terrain = generateTerrain(
     grid.width,
     grid.height,
     locations,
     grid.regions,
-    undefined,
+    terrainSeed,
     grid.biomeZones,
   );
   clearBuildingTerrain(terrain, locations);
@@ -76,5 +125,17 @@ export function generateGameMapHtml(
     },
   };
 
-  return buildGameMapHtml(gameData);
+  const html = buildGameMapHtml(gameData);
+
+  // Build new state for persistence
+  const newState = buildMapState(
+    locations,
+    grid.width,
+    grid.height,
+    terrainSeed,
+    grid.effectiveAnchors,
+    prevState ?? null,
+  );
+
+  return { html, newState };
 }
