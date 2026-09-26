@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { scan } from "../scanner/index.js";
+import { getFileLanguage } from "../scanner/language-detector.js";
 import { parse } from "../parser/index.js";
 import { analyze } from "../analyzer/index.js";
 import { render, openInBrowser } from "../renderer/index.js";
@@ -39,6 +40,22 @@ export interface AnalyzeOptions {
 const SEVERITY_RANK: Record<Severity, number> = { error: 3, warning: 2, info: 1 };
 
 /**
+ * Files per language among the files actually scanned. Language detection
+ * counts with a looser glob (tests, tool configs, a bare package.json), so
+ * its numbers don't match what ends up on the map.
+ */
+export function languageCounts(files: string[]): Array<{ language: string; files: number }> {
+  const counts = new Map<string, number>();
+  for (const file of files) {
+    const language = getFileLanguage(file);
+    if (language) counts.set(language, (counts.get(language) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([language, n]) => ({ language, files: n }))
+    .sort((a, b) => b.files - a.files || a.language.localeCompare(b.language));
+}
+
+/**
  * Results go to a per-project folder under the OS temp directory unless
  * --output says otherwise: a tool that warns about committed junk shouldn't
  * drop HTML files into the project it inspects.
@@ -62,11 +79,10 @@ export async function analyzeCommand(dir: string, options: AnalyzeOptions): Prom
   let scanResult;
   try {
     scanResult = await scan(targetDir, { focus: options.focus, depth: options.depth });
-    const langSummary =
-      scanResult.languages.length > 0
-        ? scanResult.languages.map((l) => `${l.language}(${l.fileCount})`).join(", ")
-        : "unknown";
-    scanSpinner.succeed(`Found ${scanResult.files.length} source files [${langSummary}]`);
+    const langSummary = languageCounts(scanResult.files)
+      .map((l) => `${l.language} ${l.files}`)
+      .join(", ");
+    scanSpinner.succeed(`Found ${scanResult.files.length} source files${langSummary ? ` (${langSummary})` : ""}`);
   } catch (error) {
     scanSpinner.fail("Scan failed");
     console.error(chalk.red((error as Error).message));
@@ -140,7 +156,7 @@ export async function analyzeCommand(dir: string, options: AnalyzeOptions): Prom
   }
 
   if (json) {
-    process.stdout.write(JSON.stringify(jsonReport(report, projectName, targetDir, scanResult.languages.map((l) => l.language), parseResult.graph.nodes.size, outputPath), null, 2) + "\n");
+    process.stdout.write(JSON.stringify(jsonReport(report, projectName, targetDir, languageCounts(scanResult.files).map((l) => l.language), parseResult.graph.nodes.size, outputPath), null, 2) + "\n");
   } else {
     console.log(
       formatInspectorReport(report, {

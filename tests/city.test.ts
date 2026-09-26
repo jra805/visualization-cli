@@ -9,7 +9,7 @@ import { createGraph, addNode, addEdge } from "../src/graph/index.js";
 import type { GraphNode } from "../src/graph/types.js";
 import type { ArchReport, Issue } from "../src/analyzer/types.js";
 import { formatInspectorReport } from "../src/renderer/terminal.js";
-import { defaultOutputDir, jsonReport } from "../src/commands/analyze.js";
+import { defaultOutputDir, jsonReport, languageCounts } from "../src/commands/analyze.js";
 import { computeGrade } from "../src/analyzer/score.js";
 
 function items(paths: string[], sizeOf: (p: string) => number = () => 1): LayoutItem[] {
@@ -170,8 +170,10 @@ describe("city model", () => {
     expect(JSON.parse(data).buildings.map((b: { path: string }) => b.path)).toContain(
       "src/</script><script>alert(1)</script>.js",
     );
-    // No external scripts: only the optional web font is fetched
+    // Fully self-contained: no external scripts, stylesheets or fonts
     expect(html).not.toMatch(/<script[^>]+src=/);
+    expect(html).not.toMatch(/<link[^>]+href=/);
+    expect(html).toContain("font/woff2;base64,");
     expect(html).toContain("<title>demo — Hamlet, grade D");
   });
 
@@ -204,6 +206,14 @@ describe("reports", () => {
     expect(json.grade!.letter).toBe(report.grade!.letter);
     expect(json.issues[0]).toMatchObject({ type: "committed-env-file", title: "Committed .env File" });
     expect(json.issues[0].explanation).toContain(".env");
+  });
+
+  it("counts languages from the files actually scanned", () => {
+    expect(languageCounts(["/p/a.ts", "/p/b.tsx", "/p/c.vue", "/p/d.py", "/p/README.md"])).toEqual([
+      { language: "typescript", files: 2 },
+      { language: "javascript", files: 1 },
+      { language: "python", files: 1 },
+    ]);
   });
 
   it("writes output outside the analyzed project by default", () => {

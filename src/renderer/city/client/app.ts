@@ -55,6 +55,8 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
   // ── Helpers ─────────────────────────────────────────────────────────────
   const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
   const esc = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => ESC[c]);
+  // Paths may wrap after a slash rather than mid-name
+  const escPath = (s: unknown) => esc(s).replace(/\//g, "/<wbr>");
   const fmt = (n: number) => n.toLocaleString("en-US");
   const SEV_LABEL: Record<string, string> = { error: "Fix now", warning: "Should fix", info: "Nice to fix" };
   const SEV_RANK: Record<string, number> = { error: 3, warning: 2, info: 1 };
@@ -721,9 +723,9 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
   let placedLabels: { x0: number; y0: number; x1: number; y1: number }[] = [];
   /** Draw a street-sign style label; returns false (and draws nothing) if it would overlap another. */
   function plate(text: string, x: number, y: number, big: boolean, color = "#1f6b45", border = "#e8f1e8", force = false): boolean {
-    ctx.font = big ? "16px 'VT323', ui-monospace, monospace" : "14px 'VT323', ui-monospace, monospace";
+    ctx.font = big ? "20px 'VT323', ui-monospace, monospace" : "18px 'VT323', ui-monospace, monospace";
     const w = Math.ceil(ctx.measureText(text).width) + 10;
-    const h = big ? 18 : 16;
+    const h = big ? 20 : 18;
     const rx = Math.round(x - w / 2);
     const ry = Math.round(y - h);
     const box = { x0: rx - 3, y0: ry - 3, x1: rx + w + 3, y1: ry + h + 3 };
@@ -776,17 +778,25 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
         plate(lot.label, s.x, s.y + 20, false, issue.severity === "error" ? "#8c2b2b" : "#7a5a1e");
       }
     }
-    // Welcome sign text
-    if (zoom >= 1) {
+    // Welcome sign text, shrunk to fit the billboard (42 px wide at 1×)
+    if (zoom >= 1 && welcomeSign.state !== "missing") {
       const p = toWorld(welcomeSign.x + 0.5, welcomeSign.y + 0.5);
-      const s = worldToScreen(p.x, p.y - 26);
-      ctx.font = `${Math.round(6 * zoom)}px 'VT323', ui-monospace, monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = welcomeSign.state === "ok" ? "#ffffff" : "#3a3a44";
-      const text = welcomeSign.state === "ok" ? `WELCOME TO ${data.name.toUpperCase()}` : welcomeSign.state === "template" ? "YOUR TOWN HERE" : "";
-      if (text) ctx.fillText(text.slice(0, 24), s.x, s.y);
-      ctx.textAlign = "left";
+      const s = worldToScreen(p.x, p.y - 23);
+      const text = welcomeSign.state === "ok" ? data.name.toUpperCase() : "YOUR TOWN HERE";
+      const maxWidth = 38 * zoom;
+      let size = Math.round(10 * zoom);
+      ctx.font = `${size}px 'VT323', ui-monospace, monospace`;
+      while (size > 7 && ctx.measureText(text).width > maxWidth) {
+        size--;
+        ctx.font = `${size}px 'VT323', ui-monospace, monospace`;
+      }
+      if (ctx.measureText(text).width <= maxWidth) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = welcomeSign.state === "ok" ? "#ffffff" : "#3a3a44";
+        ctx.fillText(text, s.x, s.y);
+        ctx.textAlign = "left";
+      }
     }
   }
 
@@ -949,10 +959,10 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
   }
 
   const sevChip = (sev: string) => `<span class="chip chip-${sev}">${SEV_LABEL[sev]}</span>`;
-  const go = (target: string, label: string) => `<button class="link" data-go="${esc(target)}">${esc(label)}</button>`;
+  const go = (target: string, label: string, cls = "link") => `<button class="${cls}" data-go="${esc(target)}">${esc(label)}</button>`;
   const fileLink = (path: string) => {
     const b = data.buildings.find((x) => x.path === path);
-    return b ? go(`building:${b.id}`, path) : `<code>${esc(path)}</code>`;
+    return b ? `<button class="link" data-go="building:${b.id}"><span>${escPath(path)}</span></button>` : `<code>${escPath(path)}</code>`;
   };
 
   function issueBlock(issue: CityIssue, open: boolean) {
@@ -989,7 +999,7 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
           : `<p class="hint">None.</p>`;
       return `
         <div class="bld-head"><canvas data-thumb></canvas>
-          <div><h2>${esc(b.name)}</h2><p class="path">${esc(b.path)}</p>
+          <div><h2>${esc(b.name)}</h2><p class="path">${escPath(b.path)}</p>
           <p class="role"><span class="style-name">${esc(style.name)}</span> · ${esc(b.role)}</p>
           <p class="hint">${esc(style.blurb)}</p></div></div>
         <div class="facts">
@@ -998,7 +1008,7 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
           <div><span>${b.fanOut}</span>imports</div>
           <div><span>${b.fanIn}</span>imported by</div>
         </div>
-        <p class="hint">In district ${go(`district:${district.id}`, (district.path || data.name) + "/")}${b.language ? ` · ${esc(b.language)}` : ""}</p>
+        <p class="hint">In district ${go(`district:${district.id}`, (district.path || data.name) + "/", "link inline")}${b.language ? ` · ${esc(b.language)}` : ""}</p>
         ${issues.length ? `<h3>Problems here (${issues.length})</h3>${issues.map((i, k) => issueBlock(i, k === 0)).join("")}` : `<p class="all-good">No problems found in this building.</p>`}
         <h3><span class="swatch swatch-out"></span>Gets supplies from (${imports.length})</h3>${list(imports)}
         <h3><span class="swatch swatch-in"></span>Supplies (${importers.length})</h3>${list(importers)}`;
@@ -1024,7 +1034,7 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
       const problems = data.issues.filter((i) => i.buildings.some((b) => inDistrict(data.buildings[b])));
       const tallest = [...members].sort((a, b) => b.lines - a.lines).slice(0, 5);
       return `
-        <h2>${esc(d.name)}/</h2><p class="path">${esc(d.path || "(project root)")}</p>
+        <h2>${escPath(d.name)}/</h2><p class="path">${escPath(d.path || "(project root)")}</p>
         <div class="facts"><div><span>${fmt(d.files)}</span>buildings</div><div><span>${fmt(d.lines)}</span>lines</div><div><span>${problems.length}</span>problems</div></div>
         <p class="hint">Every folder is a district. Its files are the buildings on its blocks; sub-folders are neighbourhoods inside it.</p>
         <h3>Tallest buildings</h3><ul class="files">${tallest.map((b) => `<li>${go(`building:${b.id}`, `${b.path} — ${fmt(b.lines)} lines`)}</li>`).join("")}</ul>
@@ -1102,7 +1112,7 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
         const where = (i: CityIssue) =>
           i.buildings.length ? data.buildings[i.buildings[0]].path : i.lot !== undefined ? data.lots[i.lot].label : "City-wide";
         html += `<details class="rtype"><summary>${star}<span class="rtitle">${esc(desc?.title ?? type)}</span>${list.length > 1 ? `<span class="count">×${list.length}</span>` : ""}</summary>
-          <ul>${list.slice(0, 60).map((i) => `<li><button class="link" data-go="issue:${i.id}"><span class="where">${esc(where(i))}</span><span class="msg">${esc(i.message)}</span></button></li>`).join("")}${list.length > 60 ? `<li class="hint">…and ${list.length - 60} more</li>` : ""}</ul></details>`;
+          <ul>${list.slice(0, 60).map((i) => `<li><button class="link" data-go="issue:${i.id}"><span class="where">${escPath(where(i))}</span><span class="msg">${esc(i.message)}</span></button></li>`).join("")}${list.length > 60 ? `<li class="hint">…and ${list.length - 60} more</li>` : ""}</ul></details>`;
       }
       html += `</section>`;
     }
@@ -1110,9 +1120,9 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
     const tallest = [...data.buildings].sort((a, b) => b.lines - a.lines).slice(0, 5);
     const busiest = [...data.buildings].filter((b) => b.fanIn > 0).sort((a, b) => b.fanIn - a.fanIn).slice(0, 5);
     html += `<section class="landmarks"><h3>Sightseeing</h3>
-      <h4>Tallest buildings</h4><ul>${tallest.map((b) => `<li><button class="link" data-go="building:${b.id}"><span class="where">${esc(b.path)}</span><span class="msg">${fmt(b.lines)} lines</span></button></li>`).join("")}</ul>
-      ${busiest.length ? `<h4>Busiest buildings</h4><ul>${busiest.map((b) => `<li><button class="link" data-go="building:${b.id}"><span class="where">${esc(b.path)}</span><span class="msg">imported by ${b.fanIn}</span></button></li>`).join("")}</ul>` : ""}
-      ${data.landmarks.cityHall !== null ? `<h4>City Hall</h4><ul><li><button class="link" data-go="building:${data.landmarks.cityHall}"><span class="where">${esc(data.buildings[data.landmarks.cityHall].path)}</span><span class="msg">entry point</span></button></li></ul>` : ""}
+      <h4>Tallest buildings</h4><ul>${tallest.map((b) => `<li><button class="link" data-go="building:${b.id}"><span class="where">${escPath(b.path)}</span><span class="msg">${fmt(b.lines)} lines</span></button></li>`).join("")}</ul>
+      ${busiest.length ? `<h4>Busiest buildings</h4><ul>${busiest.map((b) => `<li><button class="link" data-go="building:${b.id}"><span class="where">${escPath(b.path)}</span><span class="msg">imported by ${b.fanIn}</span></button></li>`).join("")}</ul>` : ""}
+      ${data.landmarks.cityHall !== null ? `<h4>City Hall</h4><ul><li><button class="link" data-go="building:${data.landmarks.cityHall}"><span class="where">${escPath(data.buildings[data.landmarks.cityHall].path)}</span><span class="msg">entry point</span></button></li></ul>` : ""}
     </section>`;
     reportList.innerHTML = html;
     const first = reportList.querySelector("details.rtype");
@@ -1132,7 +1142,7 @@ export function runCity(data: CityModel, kit: SpriteKit): void {
       .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)) || a.path.length - b.path.length)
       .slice(0, 12);
     results.innerHTML = searchHits.length
-      ? searchHits.map((b) => `<button class="link" data-go="building:${b.id}"><span class="where">${esc(b.name)}</span><span class="msg">${esc(b.path)}</span></button>`).join("")
+      ? searchHits.map((b) => `<button class="link" data-go="building:${b.id}"><span class="where">${esc(b.name)}</span><span class="msg">${escPath(b.path)}</span></button>`).join("")
       : `<p class="hint">No building matches “${esc(q)}”.</p>`;
     results.hidden = false;
   });
