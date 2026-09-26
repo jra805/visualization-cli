@@ -1,28 +1,28 @@
 import { describe, it, expect, vi } from "vitest";
 
-// We test the bus factor logic by mocking execSync
+// We test the bus factor logic by mocking execFileSync
 vi.mock("node:child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { detectBusFactors } from "../src/analyzer/bus-factor.js";
 import { createGraph, addNode } from "../src/graph/index.js";
-import path from "node:path";
 
-const mockedExecSync = vi.mocked(execSync);
+const mockedExecSync = vi.mocked(execFileSync);
 const ROOT = "/test/project";
 
-function absPath(rel: string) {
-  return path.resolve(ROOT, rel);
+// Node IDs are paths relative to the scanned root, exactly as the parsers emit them
+function nodeId(rel: string) {
+  return rel;
 }
 
 describe("bus-factor", () => {
   it("detects single-author files as bus factor = 1", () => {
     const graph = createGraph();
     addNode(graph, {
-      id: absPath("src/app.ts"),
-      filePath: absPath("src/app.ts"),
+      id: nodeId("src/app.ts"),
+      filePath: nodeId("src/app.ts"),
       label: "app",
       moduleType: "component",
       loc: 100,
@@ -34,7 +34,7 @@ describe("bus-factor", () => {
     );
 
     const result = detectBusFactors(graph, ROOT);
-    const appData = result.get(absPath("src/app.ts"));
+    const appData = result.get(nodeId("src/app.ts"));
 
     expect(appData).toBeDefined();
     expect(appData!.busFactor).toBe(1);
@@ -46,8 +46,8 @@ describe("bus-factor", () => {
   it("detects multi-author files as bus factor > 1", () => {
     const graph = createGraph();
     addNode(graph, {
-      id: absPath("src/shared.ts"),
-      filePath: absPath("src/shared.ts"),
+      id: nodeId("src/shared.ts"),
+      filePath: nodeId("src/shared.ts"),
       label: "shared",
       moduleType: "util",
       loc: 50,
@@ -59,7 +59,7 @@ describe("bus-factor", () => {
     );
 
     const result = detectBusFactors(graph, ROOT);
-    const data = result.get(absPath("src/shared.ts"));
+    const data = result.get(nodeId("src/shared.ts"));
 
     expect(data).toBeDefined();
     expect(data!.busFactor).toBe(2);
@@ -69,8 +69,8 @@ describe("bus-factor", () => {
   it("returns empty map when git fails", () => {
     const graph = createGraph();
     addNode(graph, {
-      id: absPath("src/x.ts"),
-      filePath: absPath("src/x.ts"),
+      id: nodeId("src/x.ts"),
+      filePath: nodeId("src/x.ts"),
       label: "x",
       moduleType: "util",
       loc: 10,
@@ -88,8 +88,8 @@ describe("bus-factor", () => {
   it("uses --since flag to limit git history window", () => {
     const graph = createGraph();
     addNode(graph, {
-      id: absPath("src/a.ts"),
-      filePath: absPath("src/a.ts"),
+      id: nodeId("src/a.ts"),
+      filePath: nodeId("src/a.ts"),
       label: "a",
       moduleType: "util",
       loc: 10,
@@ -100,16 +100,37 @@ describe("bus-factor", () => {
 
     detectBusFactors(graph, ROOT);
     expect(mockedExecSync).toHaveBeenCalledWith(
-      expect.stringContaining('--since="12 months ago"'),
+      "git",
+      expect.arrayContaining(["--since=12 months ago"]),
       expect.any(Object),
+    );
+  });
+
+  it("never builds a shell command (paths come from the analyzed repo)", () => {
+    const graph = createGraph();
+    mockedExecSync.mockReturnValue("");
+    detectBusFactors(graph, ROOT);
+    const [file, args] = mockedExecSync.mock.calls.at(-1)!;
+    expect(file).toBe("git");
+    expect(Array.isArray(args)).toBe(true);
+  });
+
+  it("asks git for paths relative to the scanned root", () => {
+    const graph = createGraph();
+    mockedExecSync.mockReturnValue("");
+    detectBusFactors(graph, ROOT);
+    expect(mockedExecSync).toHaveBeenCalledWith(
+      "git",
+      expect.arrayContaining(["--relative"]),
+      expect.objectContaining({ cwd: ROOT }),
     );
   });
 
   it("only includes files that exist in the graph", () => {
     const graph = createGraph();
     addNode(graph, {
-      id: absPath("src/a.ts"),
-      filePath: absPath("src/a.ts"),
+      id: nodeId("src/a.ts"),
+      filePath: nodeId("src/a.ts"),
       label: "a",
       moduleType: "util",
       loc: 10,
@@ -121,7 +142,7 @@ describe("bus-factor", () => {
     );
 
     const result = detectBusFactors(graph, ROOT);
-    expect(result.has(absPath("src/a.ts"))).toBe(true);
-    expect(result.has(absPath("src/b.ts"))).toBe(false);
+    expect(result.has(nodeId("src/a.ts"))).toBe(true);
+    expect(result.has(nodeId("src/b.ts"))).toBe(false);
   });
 });

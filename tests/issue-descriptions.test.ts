@@ -42,8 +42,9 @@ describe("issue-descriptions", () => {
 
   it("getIssueDescription returns correct entry", () => {
     const desc = getIssueDescription("circular-dependency");
-    expect(desc.title).toBe("Circular Dependency");
+    expect(desc.title).toBe("Circular Import");
     expect(desc.explanation).toContain("loop");
-    expect(desc.suggestion).toContain("Extract");
+    expect(desc.suggestion).toContain("third file");
+    expect(desc.city.name).toBeTruthy();
   });
 });

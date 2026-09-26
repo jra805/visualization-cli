@@ -58,6 +58,10 @@ export interface Edge {
   source: string;
   target: string;
   type: "import" | "renders" | "data-flow";
+  /** `import type` / `export type`: erased at runtime, so it can't form a real cycle. */
+  typeOnly?: boolean;
+  /** Loaded on first use (dynamic import(), an import inside a function): no import-time cycle. */
+  lazy?: boolean;
 }
 
 export interface Graph {

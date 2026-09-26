@@ -2,6 +2,20 @@ import type { ComponentInfo } from "../parser/types.js";
 import type { Graph } from "../graph/types.js";
 import type { Issue } from "./types.js";
 
+const PASS_THROUGH_PROPS = new Set([
+  "children",
+  "className",
+  "style",
+  "id",
+  "key",
+  "ref",
+  "sx",
+  "as",
+  "asChild",
+  "variant",
+  "size",
+]);
+
 export function detectPropDrilling(
   components: ComponentInfo[],
   graph: Graph
@@ -19,12 +33,17 @@ export function detectPropDrilling(
   }
 
   // Check for props passed through multiple levels
+  const seen = new Set<string>();
   for (const comp of components) {
     if (comp.props.length === 0) continue;
 
     for (const prop of comp.props) {
+      // Composition and styling props are passed along by design
+      if (PASS_THROUGH_PROPS.has(prop.name)) continue;
       const chain = tracePropChain(comp.name, prop.name, components, parentMap);
-      if (chain.length >= 3) {
+      const key = `${prop.name}:${chain.join(">")}`;
+      if (chain.length >= 3 && !seen.has(key)) {
+        seen.add(key);
         issues.push({
           type: "prop-drilling",
           severity: "warning",

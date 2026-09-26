@@ -417,7 +417,7 @@ describe("renderer", () => {
       expect(match).toBeTruthy();
       const descs = JSON.parse(match![1]);
       expect(descs["circular-dependency"]).toBeDefined();
-      expect(descs["circular-dependency"].title).toBe("Circular Dependency");
+      expect(descs["circular-dependency"].title).toBe("Circular Import");
       expect(descs["circular-dependency"].explanation).toBeTruthy();
       expect(descs["circular-dependency"].suggestion).toBeTruthy();
     });

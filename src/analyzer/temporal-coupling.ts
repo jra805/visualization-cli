@@ -4,7 +4,7 @@ import { getCoChangedFiles } from "./git-history.js";
 
 export interface TemporalCouplingOptions {
   rootDir: string;
-  months?: number;
+  maxCommits?: number;
   minCoChanges?: number; // minimum co-change count (default 3)
   minConfidence?: number; // minimum confidence threshold (default 0.5)
 }
@@ -19,12 +19,12 @@ export function detectTemporalCoupling(
 ): TemporalCoupling[] {
   const {
     rootDir,
-    months = 6,
+    maxCommits = 500,
     minCoChanges = 3,
     minConfidence = 0.5,
   } = options;
 
-  const coChanges = getCoChangedFiles(rootDir, months);
+  const coChanges = getCoChangedFiles(rootDir, maxCommits);
   if (coChanges.length === 0) return [];
 
   // Build a set of existing import edges for fast lookup

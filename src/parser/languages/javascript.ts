@@ -1,20 +1,34 @@
 import fs from "node:fs";
 import path from "node:path";
+import { ts } from "ts-morph";
 import type { LanguageParser, ParsedDependencies } from "../language-parser.js";
 import type { GraphNode, Edge } from "../../graph/types.js";
 import { classifyModule } from "../module-classifier.js";
 import { getModuleName } from "../../utils/paths.js";
 import { getFileLanguage } from "../../scanner/language-detector.js";
-import { findCircularDeps } from "../../analyzer/circular.js";
 
 /**
- * Regex-based JS/TS import parser — replaces skott dependency.
- * Handles: import/export from, require(), dynamic import(), tsconfig path aliases.
- * Includes Tarjan's SCC for circular dependency detection.
+ * JS/TS import parser built on TypeScript's own pre-processor, which knows
+ * the difference between an import and the word "import" in a comment or a
+ * string. Handles side-effect imports, re-exports, require(), dynamic
+ * import(), `import x = require()`, tsconfig/jsconfig path aliases, and the
+ * <script> blocks of Vue, Svelte and Astro files.
  */
 export class JavaScriptParser implements LanguageParser {
   language = "javascript" as const;
-  extensions = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"];
+  extensions = [
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".mjs",
+    ".cjs",
+    ".mts",
+    ".cts",
+    ".vue",
+    ".svelte",
+    ".astro",
+  ];
 
   async parseImports(
     files: string[],
@@ -23,23 +37,24 @@ export class JavaScriptParser implements LanguageParser {
     const nodes: GraphNode[] = [];
     const edges: Edge[] = [];
 
-    // Map of relative paths for resolution
-    const relPathMap = new Map<string, string>();
-    for (const f of files) {
-      const rel = toRelative(f, rootDir);
-      relPathMap.set(rel, f);
-    }
-
-    // Read tsconfig path aliases
-    const aliasResolver = loadPathAliases(rootDir);
-
+    const rels = files.map((f) => toRelative(f, rootDir));
+    const index = new FileIndex(rels);
+    const resolvers = new ResolverSet(rootDir, rels);
+    const contents = new Map<string, string>();
     for (const file of files) {
       const content = readFile(file);
-      if (content === null) continue;
+      if (content !== null) contents.set(toRelative(file, rootDir), content);
+    }
+    // Files that only declare types (interfaces, type aliases) vanish at runtime
+    const typeOnlyModules = new Set(
+      [...contents].filter(([rel, src]) => /\.[cm]?tsx?$/.test(rel) && declaresOnlyTypes(src)).map(([rel]) => rel),
+    );
 
+    for (const file of files) {
       const relPath = toRelative(file, rootDir);
+      const content = contents.get(relPath);
+      if (content === undefined) continue;
       const loc = content.split("\n").filter((l) => l.trim().length > 0).length;
-      const lang = getFileLanguage(file);
 
       nodes.push({
         id: relPath,
@@ -48,116 +63,279 @@ export class JavaScriptParser implements LanguageParser {
         moduleType: classifyModule(relPath),
         loc,
         directory: relPath.substring(0, relPath.lastIndexOf("/")),
-        language: lang,
+        language: getFileLanguage(file) ?? "javascript",
       });
 
-      const imports = extractImports(content);
-      for (const imp of imports) {
-        // Try to resolve the import
-        const resolved = resolveImport(imp, relPath, relPathMap, aliasResolver);
-        if (resolved) {
-          edges.push({ source: relPath, target: resolved, type: "import" });
+      const aliases = resolvers.forFile(relPath);
+      for (const imp of extractImports(content, relPath)) {
+        const resolved = resolveImport(imp.specifier, relPath, index, aliases);
+        if (resolved && resolved !== relPath) {
+          const typeOnly = imp.typeOnly || typeOnlyModules.has(resolved);
+          edges.push({
+            source: relPath,
+            target: resolved,
+            type: "import",
+            ...(typeOnly ? { typeOnly: true } : {}),
+            ...(imp.lazy && !typeOnly ? { lazy: true } : {}),
+          });
         }
       }
     }
 
-    // Detect circular dependencies using Tarjan's SCC
-    const circularDeps = findCircularDeps(nodes, edges);
-
-    return { nodes, edges, circularDeps };
+    return { nodes, edges };
   }
 }
 
-// ── Path Alias Resolution ──
+// ── Import extraction ─────────────────────────────────────────────────────
+
+export interface ImportRef {
+  specifier: string;
+  typeOnly: boolean;
+  /** Dynamic import(): loaded on demand, so it can't cause an import-time cycle. */
+  lazy: boolean;
+}
+
+/** Extract import specifiers from JS/TS source (or a .vue/.svelte/.astro file). */
+export function extractImports(content: string, fileName = "file.ts"): ImportRef[] {
+  // specifier → flags; a plain runtime import wins over type-only or lazy ones
+  const found = new Map<string, { typeOnly: boolean; lazy: boolean }>();
+  const add = (specifier: string, typeOnly: boolean, lazy: boolean) => {
+    const prev = found.get(specifier);
+    found.set(specifier, {
+      typeOnly: (prev?.typeOnly ?? true) && typeOnly,
+      lazy: (prev?.lazy ?? true) && lazy,
+    });
+  };
+
+  for (const src of scriptBlocks(content, fileName)) {
+    const info = ts.preProcessFile(src, true, true);
+    for (const ref of info.importedFiles) {
+      const before = src.slice(Math.max(0, ref.pos - 300), ref.pos);
+      const dynamic = /\bimport\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*$/.test(before);
+      add(ref.fileName, isTypeOnlyImport(src, ref.pos), dynamic);
+    }
+    // Workers and assets: new URL("./worker.js", import.meta.url), new Worker("./w.js")
+    for (const m of src.matchAll(
+      /new\s+URL\(\s*["'`](\.{1,2}\/[^"'`]+)["'`]\s*,\s*import\.meta\.url/g,
+    )) {
+      add(m[1], false, true);
+    }
+    for (const m of src.matchAll(/new\s+(?:Shared)?Worker\(\s*["'`](\.{1,2}\/[^"'`]+)["'`]/g)) {
+      add(m[1], false, true);
+    }
+  }
+  return [...found].map(([specifier, flags]) => ({ specifier, ...flags }));
+}
+
+/** The parts of a file that contain JavaScript. */
+function scriptBlocks(content: string, fileName: string): string[] {
+  if (/\.(vue|svelte|astro)$/.test(fileName)) {
+    const blocks = [...content.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(
+      (m) => m[1],
+    );
+    if (fileName.endsWith(".astro")) {
+      const frontmatter = content.match(/^\s*---\r?\n([\s\S]*?)\r?\n---/);
+      if (frontmatter) blocks.unshift(frontmatter[1]);
+    }
+    return blocks;
+  }
+  return [content];
+}
+
+/**
+ * `import type { X } from "./x"`, `export type { X } from "./x"` and
+ * `import { type A, type B } from "./x"` disappear at runtime.
+ */
+function isTypeOnlyImport(src: string, specifierPos: number): boolean {
+  const before = src.slice(Math.max(0, specifierPos - 2000), specifierPos);
+  const kw = Math.max(before.lastIndexOf("import"), before.lastIndexOf("export"));
+  if (kw === -1) return false;
+  const stmt = before.slice(kw);
+  if (/^(import|export)\s+type\b/.test(stmt)) return true;
+  const braces = stmt.match(/^import\s*\{([^}]*)\}\s*from\s*$/);
+  if (!braces) return false;
+  const specifiers = braces[1]
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return specifiers.length > 0 && specifiers.every((s) => /^type\s/.test(s));
+}
+
+// ── Path aliases (tsconfig / jsconfig) ────────────────────────────────────
 
 interface PathAlias {
-  prefix: string; // e.g. "@/" from "@/*"
-  targets: string[]; // e.g. ["src/"] from ["./src/*"]
+  /** Text before the "*" (or the whole pattern when there is no wildcard). */
+  prefix: string;
+  suffix: string;
+  wildcard: boolean;
+  /** Targets relative to the project root; may contain one "*". */
+  targets: string[];
 }
 
 interface AliasResolver {
   aliases: PathAlias[];
-  baseUrl: string | undefined;
+  /** baseUrl directories relative to the project root ("" = the root itself). */
+  baseUrls: string[];
 }
 
-function loadPathAliases(rootDir: string): AliasResolver {
-  const aliases: PathAlias[] = [];
-  let baseUrl: string | undefined;
+interface CompilerPaths {
+  baseUrl?: string;
+  baseUrlDir?: string;
+  paths?: Record<string, string[]>;
+  pathsDir?: string;
+}
 
-  // Try tsconfig.json, then jsconfig.json
-  for (const configName of ["tsconfig.json", "jsconfig.json"]) {
-    const configPath = path.join(rootDir, configName);
-    if (!fs.existsSync(configPath)) continue;
+/** Read a tsconfig/jsconfig, following relative `extends` chains. */
+function loadConfig(
+  cfgPath: string,
+  depth = 0,
+): { opts: CompilerPaths; references: string[] } {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(cfgPath, "utf-8");
+  } catch {
+    return { opts: {}, references: [] };
+  }
+  if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+  const json = parseJsonWithComments(raw);
+  if (!json || typeof json !== "object") return { opts: {}, references: [] };
+  const dir = path.dirname(cfgPath);
 
+  let opts: CompilerPaths = {};
+  const parents = Array.isArray(json.extends) ? json.extends : json.extends ? [json.extends] : [];
+  for (const parent of parents) {
+    if (depth >= 5 || typeof parent !== "string") continue;
+    if (!parent.startsWith(".") && !path.isAbsolute(parent)) continue; // package configs
+    let parentPath = path.resolve(dir, parent);
+    if (!fs.existsSync(parentPath) && fs.existsSync(parentPath + ".json")) {
+      parentPath += ".json";
+    }
+    opts = { ...opts, ...loadConfig(parentPath, depth + 1).opts };
+  }
+
+  const co = json.compilerOptions ?? {};
+  if (typeof co.baseUrl === "string") {
+    opts.baseUrl = co.baseUrl;
+    opts.baseUrlDir = dir;
+  }
+  if (co.paths && typeof co.paths === "object") {
+    opts.paths = co.paths;
+    opts.pathsDir = dir;
+  }
+
+  const references: string[] = [];
+  for (const ref of Array.isArray(json.references) ? json.references : []) {
+    if (typeof ref?.path !== "string") continue;
+    let refPath = path.resolve(dir, ref.path);
     try {
-      let raw = fs.readFileSync(configPath, "utf-8");
-      // Strip BOM
-      if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
-      const config = parseJsonWithComments(raw);
-
-      const compilerOptions = config.compilerOptions ?? {};
-      baseUrl = compilerOptions.baseUrl;
-
-      // Follow one level of "extends" for paths
-      let paths = compilerOptions.paths;
-      if (!paths && config.extends) {
-        try {
-          const extPath = path.resolve(rootDir, config.extends);
-          if (fs.existsSync(extPath)) {
-            let extRaw = fs.readFileSync(extPath, "utf-8");
-            if (extRaw.charCodeAt(0) === 0xfeff) extRaw = extRaw.slice(1);
-            const extConfig = parseJsonWithComments(extRaw);
-            paths = extConfig.compilerOptions?.paths;
-            if (!baseUrl) baseUrl = extConfig.compilerOptions?.baseUrl;
-          }
-        } catch {
-          // ignore extended config errors
-        }
-      }
-
-      if (paths) {
-        for (const [pattern, mappings] of Object.entries(paths)) {
-          // Convert "@/*" → prefix "@/"
-          const prefix = pattern.endsWith("/*")
-            ? pattern.slice(0, -1) // "@/*" → "@/"
-            : pattern; // exact match
-
-          const targets = (mappings as string[]).map((m) => {
-            // Normalize target: "./src/*" → "src/", "src/*" → "src/"
-            let t = m.replace(/^\.\//, "");
-            if (t.endsWith("/*")) t = t.slice(0, -1); // "src/*" → "src/"
-            if (t.endsWith("*")) t = t.slice(0, -1);
-            // If baseUrl is set, prepend it
-            if (baseUrl && baseUrl !== "." && !t.startsWith(baseUrl)) {
-              t = baseUrl.replace(/\/$/, "") + "/" + t;
-            }
-            return t;
-          });
-
-          aliases.push({ prefix, targets });
-        }
-      }
-
-      break; // Use first config found
+      if (fs.statSync(refPath).isDirectory()) refPath = path.join(refPath, "tsconfig.json");
     } catch {
-      // Config parse error — skip, fallbacks below will handle it
+      continue;
+    }
+    references.push(refPath);
+  }
+  return { opts, references };
+}
+
+/**
+ * One alias resolver per folder that has its own tsconfig/jsconfig, so each
+ * app in a monorepo (or client/ next to server/) uses its own "@/" mapping.
+ */
+class ResolverSet {
+  private byDir = new Map<string, AliasResolver>();
+
+  constructor(
+    private rootDir: string,
+    rels: string[],
+  ) {
+    const dirs = new Set<string>([""]);
+    for (const rel of rels) {
+      const parts = rel.split("/").slice(0, -1);
+      for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
+    }
+    for (const dir of dirs) {
+      const abs = path.join(rootDir, dir);
+      const hasConfig =
+        dir === "" ||
+        ["tsconfig.json", "jsconfig.json", "package.json"].some((n) =>
+          fs.existsSync(path.join(abs, n)),
+        );
+      if (hasConfig) this.byDir.set(dir, loadPathAliases(rootDir, abs));
     }
   }
 
-  // Fallback: if no @/ alias was found, add common conventions
-  const hasAtAlias = aliases.some((a) => a.prefix === "@/");
-  if (!hasAtAlias) {
-    // Try @/ → src/ (most common Next.js/Vite convention)
-    const srcDir = path.join(rootDir, "src");
-    if (fs.existsSync(srcDir)) {
-      aliases.push({ prefix: "@/", targets: ["src/"] });
-    } else {
-      // Try @/ → ./ (root-level source)
-      aliases.push({ prefix: "@/", targets: [""] });
+  /** The resolver of the nearest folder (upwards) with its own config. */
+  forFile(rel: string): AliasResolver {
+    const parts = rel.split("/").slice(0, -1);
+    for (let i = parts.length; i >= 0; i--) {
+      const found = this.byDir.get(parts.slice(0, i).join("/"));
+      if (found) return found;
+    }
+    return this.byDir.get("")!;
+  }
+}
+
+/** A module with nothing but type declarations (interfaces, type aliases). */
+function declaresOnlyTypes(src: string): boolean {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  if (!/^\s*export\s+(interface|type)\b/m.test(code)) return false;
+  return !/^\s*(export\s+)?(default\b|declare\s+(const|function|class)|const|let|var|function|async|class|enum|abstract)\b|module\.exports|^\s*export\s*(\*|\{)/m.test(
+    code,
+  );
+}
+
+function loadPathAliases(rootDir: string, configDir: string = rootDir): AliasResolver {
+  const aliases: PathAlias[] = [];
+  const baseUrls = new Set<string>();
+  const toRootRel = (abs: string) => path.relative(rootDir, abs).split(path.sep).join("/");
+
+  // tsconfig.json may only reference tsconfig.app.json (Vite's layout), so walk references too
+  const queue = ["tsconfig.json", "jsconfig.json"]
+    .map((n) => path.join(configDir, n))
+    .filter((p) => fs.existsSync(p));
+  const seen = new Set<string>();
+  while (queue.length > 0 && seen.size < 10) {
+    const cfgPath = queue.shift()!;
+    if (seen.has(cfgPath)) continue;
+    seen.add(cfgPath);
+    const { opts, references } = loadConfig(cfgPath);
+    queue.push(...references);
+
+    const absBase =
+      opts.baseUrl !== undefined ? path.resolve(opts.baseUrlDir!, opts.baseUrl) : undefined;
+    if (absBase !== undefined) baseUrls.add(toRootRel(absBase));
+
+    if (opts.paths) {
+      // TypeScript resolves `paths` against baseUrl, or the defining config's folder
+      const pathsBase = absBase ?? opts.pathsDir!;
+      for (const [pattern, targets] of Object.entries(opts.paths)) {
+        if (!Array.isArray(targets)) continue;
+        const star = pattern.indexOf("*");
+        aliases.push({
+          prefix: star === -1 ? pattern : pattern.slice(0, star),
+          suffix: star === -1 ? "" : pattern.slice(star + 1),
+          wildcard: star !== -1,
+          targets: targets
+            .filter((t): t is string => typeof t === "string")
+            .map((t) => toRootRel(path.resolve(pathsBase, t))),
+        });
+      }
     }
   }
 
-  return { aliases, baseUrl };
+  // Many Vite/Next projects define "@/" only in the bundler config
+  if (!aliases.some((a) => a.prefix === "@/")) {
+    const base = toRootRel(configDir);
+    const target = fs.existsSync(path.join(configDir, "src")) ? "src/*" : "*";
+    aliases.push({
+      prefix: "@/",
+      suffix: "",
+      wildcard: true,
+      targets: [base ? `${base}/${target}` : target],
+    });
+  }
+  aliases.sort((a, b) => b.prefix.length - a.prefix.length);
+  return { aliases, baseUrls: [...baseUrls] };
 }
 
 /**
@@ -176,7 +354,6 @@ function parseJsonWithComments(raw: string): any {
     if (inString) {
       result += ch;
       if (ch === "\\") {
-        // Escaped character — copy next char too
         i++;
         if (i < raw.length) result += raw[i];
       } else if (ch === '"') {
@@ -193,18 +370,15 @@ function parseJsonWithComments(raw: string): any {
       continue;
     }
 
-    // Line comment
-    if (ch === "/" && i + 1 < raw.length && raw[i + 1] === "/") {
-      // Skip until end of line
+    if (ch === "/" && raw[i + 1] === "/") {
       while (i < raw.length && raw[i] !== "\n") i++;
       continue;
     }
 
-    // Block comment
-    if (ch === "/" && i + 1 < raw.length && raw[i + 1] === "*") {
+    if (ch === "/" && raw[i + 1] === "*") {
       i += 2;
       while (i + 1 < raw.length && !(raw[i] === "*" && raw[i + 1] === "/")) i++;
-      i += 2; // skip */
+      i += 2;
       continue;
     }
 
@@ -222,56 +396,86 @@ function parseJsonWithComments(raw: string): any {
   }
 }
 
-/**
- * Resolve an import specifier to a relative file path in the project.
- * Handles: relative imports, path aliases, baseUrl imports, .js→.ts swaps.
- */
-function resolveImport(
-  importPath: string,
-  fromFile: string,
-  fileMap: Map<string, string>,
-  aliasResolver: AliasResolver,
-): string | undefined {
-  // 1. Relative imports (./foo, ../bar)
-  if (importPath.startsWith(".")) {
-    const resolved = resolveRelative(importPath, fromFile);
-    return tryResolveFile(resolved, fileMap);
+// ── Resolution ────────────────────────────────────────────────────────────
+
+const EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".mts",
+  ".cts",
+  ".vue",
+  ".svelte",
+  ".astro",
+];
+
+/** Project files by exact and case-insensitive relative path. */
+class FileIndex {
+  private exact: Set<string>;
+  private lower = new Map<string, string>();
+
+  constructor(files: string[]) {
+    this.exact = new Set(files);
+    for (const f of files) this.lower.set(f.toLowerCase(), f);
   }
 
-  // 2. Path alias resolution (@/foo, ~/bar, etc.)
-  for (const alias of aliasResolver.aliases) {
-    if (
-      importPath === alias.prefix.slice(0, -1) ||
-      importPath.startsWith(alias.prefix)
-    ) {
-      const suffix = importPath.startsWith(alias.prefix)
-        ? importPath.slice(alias.prefix.length)
-        : "";
+  /** Exact match first; case-insensitive as a fallback (macOS/Windows resolve these). */
+  get(p: string): string | undefined {
+    if (this.exact.has(p)) return p;
+    return this.lower.get(p.toLowerCase());
+  }
+}
 
-      for (const target of alias.targets) {
-        const resolved = target + suffix;
-        const found = tryResolveFile(resolved, fileMap);
-        if (found) return found;
+/**
+ * Resolve an import specifier to a file in the project, or undefined for
+ * packages, Node built-ins and anything outside the project.
+ */
+function resolveImport(
+  specifier: string,
+  fromFile: string,
+  index: FileIndex,
+  resolver: AliasResolver,
+): string | undefined {
+  const spec = specifier.replace(/[?#].*$/, ""); // "./icon.svg?react"
+  if (!spec) return undefined;
+
+  if (spec.startsWith(".")) {
+    return tryResolveFile(resolveRelative(spec, fromFile), index);
+  }
+
+  for (const alias of resolver.aliases) {
+    let star: string | null = null;
+    if (alias.wildcard) {
+      if (
+        spec.startsWith(alias.prefix) &&
+        spec.endsWith(alias.suffix) &&
+        spec.length >= alias.prefix.length + alias.suffix.length
+      ) {
+        star = spec.slice(alias.prefix.length, spec.length - alias.suffix.length);
       }
+    } else if (spec === alias.prefix) {
+      star = "";
+    }
+    if (star === null) continue;
+    for (const target of alias.targets) {
+      const found = tryResolveFile(target.replace("*", star), index);
+      if (found) return found;
     }
   }
 
-  // 3. baseUrl resolution (e.g. baseUrl: "src" → import "components/Foo" resolves to "src/components/Foo")
-  if (aliasResolver.baseUrl) {
-    const base =
-      aliasResolver.baseUrl === "."
-        ? ""
-        : aliasResolver.baseUrl.replace(/\/$/, "") + "/";
-    const resolved = base + importPath;
-    const found = tryResolveFile(resolved, fileMap);
+  // baseUrl imports: baseUrl "src" makes `import "components/Foo"` mean src/components/Foo
+  for (const base of resolver.baseUrls) {
+    const found = tryResolveFile(base ? `${base}/${spec}` : spec, index);
     if (found) return found;
   }
 
-  // 4. Try as-is (might be a local file without relative prefix)
-  return tryResolveFile(importPath, fileMap);
+  // Bare specifiers are packages ("react", "util", "node:fs") — never local files
+  return undefined;
 }
 
-/** Resolve a relative path from a source file */
 function resolveRelative(importPath: string, fromFile: string): string {
   const fromDir = fromFile.substring(0, fromFile.lastIndexOf("/"));
   const parts = [...fromDir.split("/"), ...importPath.split("/")];
@@ -284,77 +488,41 @@ function resolveRelative(importPath: string, fromFile: string): string {
 }
 
 /**
- * Try to find a file in the project map, handling:
- * - Exact match
- * - Extension resolution (.ts, .tsx, .js, .jsx, etc.)
- * - .js → .ts/.tsx swap (ESM TS projects import with .js extension)
- * - Index/barrel imports (dir/index.ts)
+ * Find a project file for a path, trying: exact, added extensions,
+ * .js→.ts style swaps (ESM TypeScript), and directory index files.
  */
-function tryResolveFile(
-  resolved: string,
-  fileMap: Map<string, string>,
-): string | undefined {
-  // Exact match
-  if (fileMap.has(resolved)) return resolved;
+function tryResolveFile(candidate: string, index: FileIndex): string | undefined {
+  const p = path.posix.normalize(candidate).replace(/^\.\//, "").replace(/\/$/, "");
+  if (!p || p.startsWith("..")) return undefined;
 
-  // Try adding extensions
-  const exts = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
-  for (const ext of exts) {
-    if (fileMap.has(resolved + ext)) return resolved + ext;
+  const direct = index.get(p);
+  if (direct) return direct;
+
+  for (const ext of EXTENSIONS) {
+    const found = index.get(p + ext);
+    if (found) return found;
   }
 
-  // Handle .js → .ts/.tsx swap (common in ESM TypeScript projects)
-  if (resolved.endsWith(".js")) {
-    const base = resolved.slice(0, -3);
-    for (const ext of [".ts", ".tsx"]) {
-      if (fileMap.has(base + ext)) return base + ext;
-    }
-  }
-  if (resolved.endsWith(".jsx")) {
-    const base = resolved.slice(0, -4);
-    if (fileMap.has(base + ".tsx")) return base + ".tsx";
-  }
-
-  // Index/barrel imports (import from "dir" → "dir/index.ts")
-  for (const ext of exts) {
-    const indexPath = resolved + "/index" + ext;
-    if (fileMap.has(indexPath)) return indexPath;
+  const swaps: Record<string, string[]> = {
+    ".js": [".ts", ".tsx"],
+    ".jsx": [".tsx"],
+    ".mjs": [".mts"],
+    ".cjs": [".cts"],
+  };
+  const ext = path.posix.extname(p);
+  for (const replacement of swaps[ext] ?? []) {
+    const found = index.get(p.slice(0, -ext.length) + replacement);
+    if (found) return found;
   }
 
+  for (const e of EXTENSIONS) {
+    const found = index.get(`${p}/index${e}`);
+    if (found) return found;
+  }
   return undefined;
 }
 
-// ── Import Extraction ──
-
-/** Extract all import paths from JS/TS source */
-function extractImports(content: string): string[] {
-  const imports: string[] = [];
-
-  // import ... from "path"
-  // export ... from "path"
-  const staticRe =
-    /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = staticRe.exec(content)) !== null) {
-    imports.push(m[1]);
-  }
-
-  // require("path")
-  const requireRe = /require\s*\(\s*["']([^"']+)["']\s*\)/g;
-  while ((m = requireRe.exec(content)) !== null) {
-    imports.push(m[1]);
-  }
-
-  // import("path") — dynamic
-  const dynamicRe = /import\s*\(\s*["']([^"']+)["']\s*\)/g;
-  while ((m = dynamicRe.exec(content)) !== null) {
-    imports.push(m[1]);
-  }
-
-  return [...new Set(imports)];
-}
-
-// ── Utilities ──
+// ── Utilities ─────────────────────────────────────────────────────────────
 
 function toRelative(absPath: string, rootDir: string): string {
   const normalized = absPath.split(path.sep).join("/");
@@ -367,7 +535,8 @@ function toRelative(absPath: string, rootDir: string): string {
 
 function readFile(filePath: string): string | null {
   try {
-    return fs.readFileSync(filePath, "utf-8");
+    const content = fs.readFileSync(filePath, "utf-8");
+    return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
   } catch {
     return null;
   }

@@ -182,7 +182,29 @@ describe("security-scanner", () => {
       const issues = detectSecurityIssues(graph);
       expect(issues).toHaveLength(1);
       expect(issues[0].type).toBe("security-injection");
-      expect(issues[0].severity).toBe("warning");
+      // SQL injection is the most damaging beginner mistake — always "fix now"
+      expect(issues[0].severity).toBe("error");
+    });
+
+    it("detects Python f-string and %-formatted SQL", () => {
+      const graph = makeGraph({ filePath: "/app/db.py", language: "python" });
+      mockedReadFileSync.mockReturnValue(
+        'cur.execute(f"SELECT * FROM users WHERE name = \'{name}\'")\n' +
+          'cur.execute("DELETE FROM posts WHERE id = %s" % post_id)\n',
+      );
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe("security-injection");
+      expect(issues[0].evidence).toHaveLength(2);
+    });
+
+    it("does not flag parameterized queries or English prose", () => {
+      const graph = makeGraph({ filePath: "/app/db.py", language: "python" });
+      mockedReadFileSync.mockReturnValue(
+        'cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))\n' +
+          'print("Please select a file from the list: " + name)\n',
+      );
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
     });
 
     it("detects template literal in SQL", () => {
@@ -228,16 +250,23 @@ describe("security-scanner", () => {
       expect(mockedReadFileSync).not.toHaveBeenCalled();
     });
 
-    it("skips security scanner files (self-exclusion)", () => {
+    it("ignores rule-like text inside regex and string literals", () => {
+      // A scanner's own rule table must not trip its rules (no filename hacks)
       const graph = makeGraph({
-        filePath: "/app/src/analyzer/security-scanner.ts",
+        filePath: "/app/src/rules.ts",
         language: "typescript",
       });
-      mockedReadFileSync.mockReturnValue("const result = eval(userInput);\n");
+      mockedReadFileSync.mockReturnValue(
+        'const EVAL = /\\beval\\s*\\(/;\nconst msg = "never call eval(x)";\n',
+      );
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
+    });
 
-      const issues = detectSecurityIssues(graph);
-      expect(issues).toHaveLength(0);
-      expect(mockedReadFileSync).not.toHaveBeenCalled();
+    it("reads files relative to the scanned root", () => {
+      const graph = makeGraph({ filePath: "src/x.js", language: "javascript" });
+      mockedReadFileSync.mockReturnValue("eval(x);\n");
+      detectSecurityIssues(graph, "/project");
+      expect(mockedReadFileSync).toHaveBeenCalledWith("/project/src/x.js", "utf-8");
     });
 
     it("skips innerHTML when file has escape function", () => {
@@ -279,25 +308,65 @@ describe("security-scanner", () => {
   });
 
   describe("insecure crypto", () => {
-    it("detects MD5 usage in JS", () => {
+    it("detects MD5 used for passwords in JS", () => {
       const graph = makeGraph({
         filePath: "/app/src/hash.ts",
         language: "typescript",
       });
-      mockedReadFileSync.mockReturnValue('const hash = createHash("md5");\n');
+      mockedReadFileSync.mockReturnValue(
+        'const hash = createHash("md5").update(password).digest("hex");\n',
+      );
 
       const issues = detectSecurityIssues(graph);
       expect(issues).toHaveLength(1);
       expect(issues[0].type).toBe("security-crypto");
     });
 
-    it("detects hashlib.md5 in Python", () => {
+    it("detects hashlib.md5 used for passwords in Python", () => {
       const graph = makeGraph({ filePath: "/app/hash.py", language: "python" });
-      mockedReadFileSync.mockReturnValue("h = hashlib.md5(data)\n");
+      mockedReadFileSync.mockReturnValue("h = hashlib.md5(password.encode())\n");
 
       const issues = detectSecurityIssues(graph);
       expect(issues).toHaveLength(1);
       expect(issues[0].type).toBe("security-crypto");
+    });
+
+    it("does not flag MD5 used as a checksum", () => {
+      const graph = makeGraph({ filePath: "/app/cache.py", language: "python" });
+      mockedReadFileSync.mockReturnValue("key = hashlib.md5(url.encode()).hexdigest()\n");
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
+    });
+  });
+
+  describe("precise secret detection", () => {
+    it("flags provider keys and credentialed database URLs", () => {
+      const graph = makeGraph({ filePath: "/app/src/db.js", language: "javascript" });
+      mockedReadFileSync.mockReturnValue(
+        'mongoose.connect("mongodb+srv://admin:SuperSecret123@cluster0.abcde.mongodb.net/app");\n',
+      );
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe("security-secret");
+      expect(issues[0].message).not.toContain("SuperSecret123");
+      expect(issues[0].evidence!.join(" ")).not.toContain("SuperSecret123");
+    });
+
+    it("ignores local development database URLs", () => {
+      const graph = makeGraph({ filePath: "/app/src/db.js", language: "javascript" });
+      mockedReadFileSync.mockReturnValue(
+        'const url = "postgres://postgres:postgres@localhost:5432/dev";\n',
+      );
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
+    });
+
+    it("catches Flask secret_key and ignores UI labels", () => {
+      const graph = makeGraph({ filePath: "/app/app.py", language: "python" });
+      mockedReadFileSync.mockReturnValue(
+        'app.secret_key = "dev-secret-key-12345"\nlabels = {"password": "Password"}\n',
+      );
+      const issues = detectSecurityIssues(graph);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].evidence![0]).toContain("app.secret_key = [redacted]");
     });
   });
 

@@ -4,7 +4,6 @@ import type { GraphNode, Edge } from "../graph/types.js";
 export interface ParsedDependencies {
   nodes: GraphNode[];
   edges: Edge[];
-  circularDeps?: string[][];
 }
 
 export interface LanguageParser {

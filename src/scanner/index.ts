@@ -8,8 +8,8 @@ import type { FrameworkType, Language, ScanResult } from "./types.js";
 
 /** Extension globs per language */
 const LANGUAGE_GLOBS: Record<Language, string[]> = {
-  javascript: ["*.js", "*.jsx", "*.mjs", "*.cjs"],
-  typescript: ["*.ts", "*.tsx"],
+  javascript: ["*.js", "*.jsx", "*.mjs", "*.cjs", "*.vue", "*.svelte", "*.astro"],
+  typescript: ["*.ts", "*.tsx", "*.mts", "*.cts", "*.vue", "*.svelte", "*.astro"],
   python: ["*.py"],
   go: ["*.go"],
   java: ["*.java"],
@@ -35,13 +35,30 @@ const LANGUAGE_IGNORES: Record<string, string[]> = {
 /** Shared ignore patterns for all languages */
 const COMMON_IGNORES = [
   "**/node_modules/**",
+  "**/bower_components/**",
   "**/dist/**",
   "**/build/**",
+  "**/out/**",
   "**/.next/**",
+  "**/.nuxt/**",
+  "**/.output/**",
+  "**/.svelte-kit/**",
+  "**/.turbo/**",
+  "**/.vercel/**",
+  "**/.expo/**",
+  "**/storybook-static/**",
   "**/coverage/**",
+  "**/__pycache__/**",
   "**/.git/**",
+  "**/.codescape/**",
   "**/*.d.ts",
-  "**/*.config.{ts,js,mjs,cjs}",
+  "**/*.min.{js,mjs,cjs}",
+  // Vendored third-party code: someone else's building, not part of your city
+  "**/{vendor,vendors,third_party,third-party,external}/**/*.{js,mjs,cjs,ts}",
+  "**/{static,assets,public}/**/{lib,libs,vendor,vendors}/**",
+  "**/{jquery,bootstrap,require,d3,lodash,moment,chart,three}{,-*,.*}.js",
+  // Tool configuration, not application code (app files like i18n.config.js stay)
+  "**/{vite,vitest,webpack,rollup,babel,jest,tailwind,postcss,eslint,prettier,stylelint,commitlint,next,nuxt,svelte,astro,remix,gatsby-config,playwright,cypress,karma,metro,tsup,drizzle,quasar,uno,windi,electron-builder,wdio,lint-staged,release}.config.{ts,js,mjs,cjs,mts,cts}",
 ];
 
 export async function scan(
@@ -67,23 +84,19 @@ export async function scan(
     ? path.join(absRoot, options.focus)
     : absRoot;
 
-  const depthGlob = options.depth
-    ? `${"*/".repeat(options.depth)}`.slice(0, -1)
-    : "**";
-
   // Build glob patterns from detected languages
   const patterns: string[] = [];
   const ignorePatterns = [...COMMON_IGNORES];
 
   if (languages.length === 0) {
     // Fallback to JS/TS if no languages detected
-    patterns.push(`${depthGlob}/*.{ts,tsx,js,jsx}`);
+    patterns.push(`**/*.{ts,tsx,js,jsx}`);
   } else {
     for (const langInfo of languages) {
       const globs = LANGUAGE_GLOBS[langInfo.language];
       if (globs) {
         for (const g of globs) {
-          patterns.push(`${depthGlob}/${g}`);
+          patterns.push(`**/${g}`);
         }
       }
       const langIgnores = LANGUAGE_IGNORES[langInfo.language];
@@ -93,15 +106,26 @@ export async function scan(
     }
   }
 
-  const files = await globby(patterns, {
+  const files = await globby([...new Set(patterns)], {
     cwd: scanDir,
     ignore: ignorePatterns,
     absolute: true,
     gitignore: true,
+    // --depth N: files at most N folders below the scanned directory
+    ...(options.depth ? { deep: options.depth + 1 } : {}),
   });
 
-  const normalizedFiles = files.map(normalizePath);
-  const entryPoints = findEntryPoints(normalizedFiles, framework, frameworks);
+  const normalizedFiles = files.map(normalizePath).sort();
+  const rootPrefix = normalizePath(absRoot) + "/";
+  const toRel = (f: string) => (f.startsWith(rootPrefix) ? f.slice(rootPrefix.length) : f);
+  const relFiles = normalizedFiles.map(toRel);
+  // Entry points use the same root-relative form as graph node IDs
+  const entryPoints = [
+    ...new Set([
+      ...findEntryPoints(normalizedFiles, framework, frameworks).map(toRel),
+      ...(await findDeclaredEntryPoints(absRoot, relFiles)),
+    ]),
+  ];
 
   return {
     rootDir: absRoot,
@@ -215,6 +239,94 @@ function findEntryPoints(
   }
 
   return [...new Set(entries)];
+}
+
+const RESOLVE_EXTS = ["", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts", "/index.js", "/index.ts"];
+
+/**
+ * Files the outside world starts from: package.json main/bin/exports/scripts
+ * and <script src> tags in HTML pages (a Vite app's main.jsx is only ever
+ * referenced from index.html).
+ */
+async function findDeclaredEntryPoints(absRoot: string, relFiles: string[]): Promise<string[]> {
+  const known = new Set(relFiles);
+  const entries = new Set<string>();
+  const addCandidate = (baseDir: string, target: string) => {
+    const clean = target.replace(/^\.\//, "").replace(/[?#].*$/, "");
+    if (!clean || /^[a-z]+:/i.test(clean)) return;
+    const joined = path.posix.normalize(baseDir ? `${baseDir}/${clean}` : clean);
+    for (const ext of RESOLVE_EXTS) {
+      if (known.has(joined + ext)) {
+        entries.add(joined + ext);
+        return;
+      }
+    }
+    // Compiled output (dist/index.js) usually mirrors src/index.ts
+    const fromSrc = joined.replace(/(^|\/)(dist|build|lib|out)\//, "$1src/").replace(/\.[cm]?js$/, "");
+    for (const ext of RESOLVE_EXTS) {
+      if (known.has(fromSrc + ext)) {
+        entries.add(fromSrc + ext);
+        return;
+      }
+    }
+  };
+
+  const configFiles = await globby(["**/package.json", "**/*.html"], {
+    cwd: absRoot,
+    ignore: COMMON_IGNORES,
+    gitignore: true,
+    deep: 6,
+  });
+
+  for (const rel of configFiles) {
+    const dir = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(absRoot, rel), "utf-8");
+    } catch {
+      continue;
+    }
+    if (rel.endsWith(".html")) {
+      for (const m of text.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) {
+        // Vite serves "/src/main.jsx" relative to the folder holding index.html
+        addCandidate(dir, m[1].replace(/^\//, ""));
+      }
+      continue;
+    }
+    let pkg: Record<string, unknown>;
+    try {
+      pkg = JSON.parse(text);
+    } catch {
+      continue;
+    }
+    const targets: string[] = [];
+    const collect = (v: unknown) => {
+      if (typeof v === "string") targets.push(v);
+      else if (v && typeof v === "object") Object.values(v).forEach(collect);
+    };
+    collect(pkg.main);
+    collect(pkg.module);
+    collect(pkg.browser);
+    collect(pkg.bin);
+    collect(pkg.exports);
+    for (const t of targets) addCandidate(dir, t);
+    // Commands anywhere in package.json (scripts, prisma.seed, nodemonConfig…) name files to run
+    const commands: string[] = [];
+    const collectCommands = (v: unknown, key = "") => {
+      if (/^(dev|peer|optional)?[dD]ependencies$|^overrides$|^resolutions$/.test(key)) return;
+      if (typeof v === "string") commands.push(v);
+      else if (v && typeof v === "object") {
+        for (const [k, child] of Object.entries(v)) collectCommands(child, k);
+      }
+    };
+    collectCommands(pkg);
+    for (const command of commands) {
+      for (const token of command.split(/[\s;&|"'=]+/)) {
+        if (/\.(c|m)?[jt]sx?$|\.py$/.test(token)) addCandidate(dir, token);
+      }
+    }
+  }
+  return [...entries];
 }
 
 export type { ScanResult, FrameworkType, Language, LanguageInfo } from "./types.js";

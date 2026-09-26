@@ -64,7 +64,11 @@ const CONTENT_RULES: ContentRule[] = [
 
   // General patterns
   { pattern: /class\s+\w+.*Migration\b/, type: "migration" },
-  { pattern: /class\s+\w+.*Test\b|describe\s*\(|it\s*\(|test\s*\(/, type: "test" },
+  // Test suites: a describe/it/test call with a string title, or a *Test class
+  {
+    pattern: /class\s+\w+Test\b|^\s*(?:describe|it|test)\s*\(\s*["'`]/m,
+    type: "test",
+  },
 ];
 
 /**

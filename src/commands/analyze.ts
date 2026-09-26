@@ -11,17 +11,21 @@ import type { OutputFormat } from "../renderer/types.js";
 import { applyGrouping } from "../graph/auto-grouper.js";
 import { disambiguateLabels } from "../utils/paths.js";
 
+/**
+ * Options as produced by commander. Note that commander stores negatable
+ * flags under the positive name: `--no-issues` sets `issues: false`.
+ */
 export interface AnalyzeOptions {
-  output: string;
+  output?: string;
   focus?: string;
   depth?: number;
-  noIssues?: boolean;
+  issues?: boolean;
   format?: OutputFormat;
   group?: boolean;
   groupConfig?: string;
   verbose?: boolean;
   fresh?: boolean;
-  noPersist?: boolean;
+  persist?: boolean;
 }
 
 export async function analyzeCommand(
@@ -88,7 +92,13 @@ export async function analyzeCommand(
     parseResult.circularDeps,
     scanResult.entryPoints,
     parseResult.parseResult.components,
-    { skipIssues: options.noIssues, rootDir: targetDir, context },
+    {
+      skipIssues: options.issues === false,
+      rootDir: targetDir,
+      context,
+      frameworks: scanResult.frameworks,
+      cycleGroups: parseResult.cycleGroups,
+    },
   );
   analyzeSpinner.succeed(
     `Analysis complete: ${report.issues.length} issues found`,
@@ -124,7 +134,7 @@ export async function analyzeCommand(
         format: options.format,
         targetDir,
         fresh: options.fresh,
-        noPersist: options.noPersist,
+        noPersist: options.persist === false,
       },
     );
     const ext = path.extname(outputDir).toLowerCase();

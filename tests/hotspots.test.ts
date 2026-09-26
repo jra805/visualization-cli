@@ -125,18 +125,19 @@ end
 // ---------- hotspots.ts (with mocked git) ----------
 
 describe("detectHotspots", () => {
-  it("computes hotspot scores for graph nodes", () => {
-    // Mock git-history to avoid actual git calls
+  // Production node IDs are paths relative to the scanned root; git output is
+  // made relative with --relative and files are read relative to rootDir.
+  it("computes hotspot scores for graph nodes keyed by relative path", () => {
     vi.mock("../src/analyzer/git-history.js", () => ({
       getChangeFrequencies: () => {
         const map = new Map();
-        map.set("/project/src/complex.ts", {
-          filePath: "/project/src/complex.ts",
+        map.set("src/complex.ts", {
+          filePath: "src/complex.ts",
           changeCount: 50,
           normalized: 1.0,
         });
-        map.set("/project/src/simple.ts", {
-          filePath: "/project/src/simple.ts",
+        map.set("src/simple.ts", {
+          filePath: "src/simple.ts",
           changeCount: 5,
           normalized: 0.1,
         });
@@ -144,7 +145,6 @@ describe("detectHotspots", () => {
       },
     }));
 
-    // Mock fs.readFileSync
     vi.mock("node:fs", async () => {
       const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
       return {
@@ -152,6 +152,7 @@ describe("detectHotspots", () => {
         default: {
           ...actual,
           readFileSync: (filePath: string) => {
+            // Must be resolved against rootDir, not process.cwd()
             if (filePath === "/project/src/complex.ts") {
               return `
                 if (a) { if (b) { if (c) { for (let i=0; i<10; i++) {
@@ -160,38 +161,26 @@ describe("detectHotspots", () => {
                 if (d && e || f) { while (g) { for (const h of i) {} } }
               `;
             }
-            return "const x = 1;";
+            if (filePath === "/project/src/simple.ts") return "const x = 1;";
+            throw new Error("unexpected read: " + filePath);
           },
         },
       };
     });
 
+    const node = (id: string, loc: number) => ({
+      id,
+      filePath: id,
+      label: id,
+      moduleType: "service" as const,
+      loc,
+      directory: "src",
+      language: "typescript" as Language,
+    });
     const graph: Graph = {
       nodes: new Map([
-        [
-          "/project/src/complex.ts",
-          {
-            id: "/project/src/complex.ts",
-            filePath: "/project/src/complex.ts",
-            label: "complex",
-            moduleType: "service",
-            loc: 100,
-            directory: "src",
-            language: "typescript" as Language,
-          },
-        ],
-        [
-          "/project/src/simple.ts",
-          {
-            id: "/project/src/simple.ts",
-            filePath: "/project/src/simple.ts",
-            label: "simple",
-            moduleType: "util",
-            loc: 10,
-            directory: "src",
-            language: "typescript" as Language,
-          },
-        ],
+        ["src/complex.ts", node("src/complex.ts", 100)],
+        ["src/simple.ts", node("src/simple.ts", 10)],
       ]),
       edges: [],
     };
@@ -199,17 +188,42 @@ describe("detectHotspots", () => {
     const hotspots = detectHotspots(graph, {
       rootDir: "/project",
       threshold: 0.3,
+      minBranches: 5,
     });
 
     expect(hotspots.size).toBe(2);
 
-    const complex = hotspots.get("/project/src/complex.ts")!;
+    const complex = hotspots.get("src/complex.ts")!;
     expect(complex.isHotspot).toBe(true);
     expect(complex.hotspotScore).toBeGreaterThan(0.3);
     expect(complex.complexity).toBeGreaterThan(0);
     expect(complex.changeCount).toBe(50);
 
-    const simple = hotspots.get("/project/src/simple.ts")!;
+    const simple = hotspots.get("src/simple.ts")!;
+    expect(simple.isHotspot).toBe(false);
     expect(simple.hotspotScore).toBeLessThan(complex.hotspotScore);
+  });
+
+  it("requires absolute churn and complexity, not just relative rank", () => {
+    const graph: Graph = {
+      nodes: new Map([
+        [
+          "src/complex.ts",
+          {
+            id: "src/complex.ts",
+            filePath: "src/complex.ts",
+            label: "complex",
+            moduleType: "service",
+            loc: 100,
+            directory: "src",
+            language: "typescript" as Language,
+          },
+        ],
+      ]),
+      edges: [],
+    };
+    // Default floors (40 branches) exceed this file's ~20 branches
+    const hotspots = detectHotspots(graph, { rootDir: "/project", threshold: 0.3 });
+    expect(hotspots.get("src/complex.ts")!.isHotspot).toBe(false);
   });
 });
