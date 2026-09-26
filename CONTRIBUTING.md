@@ -35,7 +35,7 @@ src/
       build-model.ts# Graph + report -> the data the page draws
       client/       # Browser code (sprites, rendering, UI), inlined via Function.toString()
     terminal.ts     # The terminal Inspector's Report
-    ...             # Legacy formats: interactive, game map, treemap, SVG, mermaid
+    ...             # Other formats: treemap, SVG, mermaid
 tests/              # Vitest
   helpers/          # Generated beginner/clean git repos for end-to-end inspection tests
   fixtures/         # Small sample projects

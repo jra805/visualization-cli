@@ -22,7 +22,7 @@ A redesign around one idea: show beginners the city their code is building, then
 - Hotspots, temporal coupling, bus factor and stale-code analysis never matched a single file (absolute vs relative paths). They now work; the team-oriented ones are opt-in with `--team`, since on a solo project every file has one author.
 - Results no longer depend on the directory you run `codescape` from.
 - Entry points were never honored by unused-file detection.
-- `--no-issues` and `--no-persist` did nothing.
+- `--no-issues` did nothing.
 - JS/TS parsing now uses TypeScript's pre-processor: side-effect imports (`import "./firebase"`) are no longer dropped, and imports inside comments or strings no longer create fake dependencies. Adds `.vue`, `.svelte`, `.astro`, `.mts`, `.cts`, tsconfig `extends`/`references`, `./`-relative `baseUrl`, per-app configs in monorepos, type-only and dynamic imports.
 - Python: `from . import x`, `from pkg import module`, relative levels, comma lists, indented and parenthesized imports, `src/` and nested roots, lazy and `TYPE_CHECKING` imports.
 - Circular imports are reported as a real loop in import order; type-only and lazy imports no longer count; deep graphs no longer overflow the stack and drop every file.
@@ -35,9 +35,13 @@ A redesign around one idea: show beginners the city their code is building, then
 - `codescape [dir]` works without the `analyze` subcommand; `--no-open`, `--json`, `--fail-on <severity>` and `--team`.
 - A terminal Inspector's Report with the grade and fix commands.
 
+### Removed
+
+- The `game` and `interactive` formats, along with `--fresh`, `--no-persist` and the `.codescape/map-state.json` file the game map wrote into projects. The city replaces the game map; `interactive` loaded Cytoscape from a CDN and went blank offline. `treemap`, `svg` and `mermaid` remain.
+
 ### Tests
 
-- 295 tests (was 236), including end-to-end inspections of generated beginner repos and regression tests for every parser bug found in the audit.
+- 224 tests, including end-to-end inspections of generated beginner repos and regression tests for every parser bug found in the audit. (The old suite had 236; the tests for the removed formats went with them.)
 
 ---
 

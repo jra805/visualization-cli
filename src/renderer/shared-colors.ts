@@ -1,5 +1,5 @@
 /**
- * Unified color palette for all renderers (SVG, interactive, treemap, mermaid).
+ * Unified color palette for all renderers (SVG, treemap, mermaid).
  * Every module type gets a visually distinct color.
  */
 
