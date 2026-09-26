@@ -13,26 +13,44 @@ Thanks for your interest in contributing! This guide will help you get started.
 ## Development Workflow
 
 ```bash
-npm run build          # Compile TypeScript
-npm test               # Run tests once
-npm run test:watch     # Run tests in watch mode
-codescape analyze .      # Test against any project
+npm run build                  # Compile TypeScript
+npm test                       # Run tests once
+npm run test:watch             # Run tests in watch mode
+node dist/index.js <project>   # Try it against any project
 ```
 
 ## Project Structure
 
 ```
 src/
-  commands/       # CLI command handlers
-  scanner/        # File discovery and language/framework detection
-  parser/         # Multi-language import/export parsing (regex-based)
-  graph/          # Dependency graph construction, grouping, filtering
-  analyzer/       # Issue detection (circular deps, coupling, hotspots, etc.)
-  renderer/       # Output formats (interactive, game map, treemap, SVG, mermaid)
-  utils/          # Shared utilities
-tests/            # Test files (vitest)
-  fixtures/       # Sample projects used in tests
+  commands/         # CLI command handlers
+  scanner/          # File discovery, language/framework detection, entry points
+  parser/           # Import parsing (TypeScript's pre-processor for JS/TS; Python resolver; regex for others)
+  graph/            # Dependency graph construction, grouping
+  analyzer/         # Inspections: structure, security, repo hygiene, code habits, grade
+    issue-descriptions.ts   # The catalog: title, why it matters, fix, city metaphor for every problem
+  renderer/
+    city/           # The 8-bit city (default format)
+      layout.ts     # Folder tree -> districts, blocks and lots (server side, deterministic)
+      build-model.ts# Graph + report -> the data the page draws
+      client/       # Browser code (sprites, rendering, UI), inlined via Function.toString()
+    terminal.ts     # The terminal Inspector's Report
+    ...             # Legacy formats: interactive, game map, treemap, SVG, mermaid
+tests/              # Vitest
+  helpers/          # Generated beginner/clean git repos for end-to-end inspection tests
+  fixtures/         # Small sample projects
 ```
+
+## Adding an Inspection
+
+1. Add the issue type to `IssueType` in `src/analyzer/types.ts`.
+2. Describe it in `src/analyzer/issue-descriptions.ts`: title, a plain-English explanation, a fix, and how it looks in the city. TypeScript won't compile until you do.
+3. Implement it in the matching module: `hygiene.ts` (what's committed or missing), `code-habits.ts`, `security-scanner.ts`, or the structural analyzers.
+4. Prove precision, not just recall. Add a test that it fires on a realistic beginner example **and** a test that it stays quiet on a realistic legitimate one. Run it against a few well-maintained open-source projects before opening the PR.
+
+## Browser Code
+
+Files in `src/renderer/city/client/` run in the browser. They're embedded with `Function.prototype.toString()`, so each exported function must be self-contained: no imports (type-only imports are fine), and no references to module-level values. `tests/city.test.ts` checks that the inlined script parses.
 
 ## Adding a New Language Parser
 
@@ -40,20 +58,15 @@ tests/            # Test files (vitest)
 2. Register it in `src/parser/parser-registry.ts`
 3. Add file extensions in `src/scanner/language-detector.ts`
 4. Add tests in `tests/`
-
-## Adding a New Output Format
-
-1. Add the format name to the `OutputFormat` union in `src/renderer/types.ts`
-2. Create the renderer in `src/renderer/<format>/`
-3. Wire it into `src/renderer/index.ts`
-4. Add the CLI option in `src/index.ts`
+5. Only add the language to `FILE_LEVEL_IMPORT_LANGUAGES` (circular/unused verdicts) if its imports really name individual files
 
 ## Guidelines
 
-- **No new runtime dependencies** unless absolutely necessary. The project uses regex-based parsing to stay lightweight.
+- **No new runtime dependencies** unless absolutely necessary. JS/TS parsing reuses the TypeScript that ships with ts-morph.
 - **TypeScript strict mode** is enabled. All code must pass type checking.
 - **Tests are required** for new features. Run `npm test` to verify.
-- **Keep renderers self-contained.** Each output format produces a single file (HTML, SVG, or Markdown) with no external dependencies.
+- **Keep renderers self-contained.** Each output format produces a single file (HTML, SVG, or Markdown). The city loads nothing from the network.
+- **Never run a shell with project-derived strings.** Use `execFileSync`/`spawn` with an argument array: file and folder names come from the repository being analyzed.
 
 ## Submitting Changes
 
