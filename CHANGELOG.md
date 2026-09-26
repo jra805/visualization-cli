@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 — Codescape City (unreleased)
+## 0.4.0 — Codescape City (2026-09-26)
 
 A redesign around one idea: show beginners the city their code is building, then point out the mistakes in it. See [docs/AUDIT.md](docs/AUDIT.md) for the audit that led here.
 
