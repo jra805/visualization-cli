@@ -338,6 +338,38 @@ describe("security-scanner", () => {
     });
   });
 
+  describe("framework internals are not beginner mistakes", () => {
+    it("does not treat a method named eval as a call to eval()", () => {
+      const graph = makeGraph({ filePath: "/app/tags.py", language: "python" });
+      mockedReadFileSync.mockReturnValue("class Node:\n    def eval(self, context):\n        return 1\n");
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
+    });
+
+    it("does not flag table names composed into SQL, only pasted-in values", () => {
+      const graph = makeGraph({ filePath: "/app/cache.py", language: "python" });
+      mockedReadFileSync.mockReturnValue(
+        'cursor.execute("DELETE FROM %s" % table)\nsql = "SELECT * FROM ({})".format(part_sql)\n',
+      );
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
+    });
+
+    it("rates eval of visible user input as fix-now, other eval as should-fix", () => {
+      const graph = makeGraph({ filePath: "/app/calc.py", language: "python" });
+      mockedReadFileSync.mockReturnValue("x = eval(input())\n");
+      expect(detectSecurityIssues(graph)[0].severity).toBe("error");
+      mockedReadFileSync.mockReturnValue("fn = eval(cmd)\n");
+      expect(detectSecurityIssues(graph)[0].severity).toBe("warning");
+    });
+
+    it("does not mistake identifier-shaped values for secrets", () => {
+      const graph = makeGraph({ filePath: "/app/views.py", language: "python" });
+      mockedReadFileSync.mockReturnValue(
+        'INTERNAL_RESET_SESSION_TOKEN = "_password_reset_token"\nAPI_KEY_ENV = "OPENAI_API_KEY"\n',
+      );
+      expect(detectSecurityIssues(graph)).toHaveLength(0);
+    });
+  });
+
   describe("precise secret detection", () => {
     it("flags provider keys and credentialed database URLs", () => {
       const graph = makeGraph({ filePath: "/app/src/db.js", language: "javascript" });

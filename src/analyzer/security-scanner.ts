@@ -100,6 +100,8 @@ function detectSecretOnLine(ctx: LineContext): { severity: Severity; what: strin
     if (!SECRET_NAME.test(name)) continue;
     if (PLACEHOLDER.test(value)) continue;
     if (/^(https?:|\/|\.\/|~)/.test(value)) continue; // URLs and paths
+    // Names rather than secrets: "_password_reset_token", "set-password", "OPENAI_API_KEY"
+    if (/^_?[a-z]+(_[a-z]+)+$|^[a-z]+(-[a-z]+)+$|^[A-Z]+(_[A-Z]+)+$/.test(value)) continue;
     // UI labels such as { password: "Password" } or apiKey: "API-Key"
     const keyword = name.match(SECRET_NAME)![1].toLowerCase().replace(/[_-]/g, "");
     if (value.toLowerCase().replace(/[_\s-]/g, "") === keyword) continue;
@@ -117,6 +119,14 @@ const SQL_FRAGMENT = /\b(SELECT|INSERT|UPDATE|DELETE|WHERE|VALUES|SET|AND|OR)\b/
 /** String literals on a line, honouring escapes and the other quote type inside. */
 const STRING_LITERAL = /((?:\b[fFrRbBuU]{1,2})?)(["'`])((?:\\.|(?!\2)[^\\])*)\2/g;
 
+/**
+ * Text right before a pasted-in piece that makes it a *value* (the dangerous
+ * case: WHERE name = '{name}', VALUES ({a}, {b}), LIKE '%{q}%'), as opposed
+ * to an identifier composed into a query (FROM {table}), which ORMs and
+ * migrations legitimately do and which can't be parameterized anyway.
+ */
+const VALUE_POSITION = /(=|<|>|\bLIKE|\bIN\s*\(|\bVALUES\s*\(|,)\s*['"%]?$|\(\s*['"]$/i;
+
 function sqlInjection(ctx: LineContext): boolean {
   const { raw } = ctx;
   if (!SQL.test(raw)) return false;
@@ -125,15 +135,27 @@ function sqlInjection(ctx: LineContext): boolean {
     if (!SQL_FRAGMENT.test(content)) continue;
     const before = raw.slice(0, m.index).trimEnd();
     const after = raw.slice(m.index! + whole.length).trimStart();
-    // `SELECT ... ${value}` and f"SELECT ... {value}"
-    if (quote === "`" && content.includes("${")) return true;
-    if (/f/i.test(prefix) && /\{[^}]+\}/.test(content)) return true;
-    // "SELECT ..." + value, value + " WHERE ...", "...{}".format(v), "...%s" % v
-    if (/^\+\s*[\w$(]/.test(after) || /[\w$)\]]\s*\+$/.test(before)) return true;
-    if (/^\.format\s*\(/.test(after) || /^%\s*[\w(]/.test(after)) return true;
+    const holes =
+      quote === "`"
+        ? [...content.matchAll(/\$\{/g)]
+        : /f/i.test(prefix)
+          ? [...content.matchAll(/\{(?!\{)[^}]+\}/g)]
+          : /^\.format\s*\(/.test(after)
+            ? [...content.matchAll(/\{[^}]*\}/g)]
+            : /^%\s*[\w(]/.test(after)
+              ? [...content.matchAll(/%(?:\([\w]+\))?[sdr]/g)]
+              : [];
+    // `... ${value}`, f"... {value}", "...{}".format(v), "...%s" % v
+    if (holes.some((h) => VALUE_POSITION.test(content.slice(0, h.index)))) return true;
+    // "SELECT ... WHERE id = " + value   /   value + "' AND ..."
+    if (/^\+\s*[\w$(]/.test(after) && VALUE_POSITION.test(content)) return true;
+    if (/[\w$)\]]\s*\+$/.test(before) && /^['"]/.test(content)) return true;
   }
   return false;
 }
+
+/** Where the evaluated text visibly comes from the outside world. */
+const USER_INPUT = /\b(request|req)\.|\binput\s*\(|\bargv\b|\bstdin\b|\b\w*(user|input|param|query|body|payload)\w*\b|\blocation\.|\bdocument\./i;
 
 const RULES: SecurityRule[] = [
   {
@@ -150,7 +172,7 @@ const RULES: SecurityRule[] = [
     severity: "error",
     languages: JS,
     description: "Use of eval()",
-    test: ({ code }) => /(?<![\w$.])eval\s*\(/.test(code),
+    test: ({ code, raw }) => /(?<![\w$.])eval\s*\(/.test(code) && (USER_INPUT.test(raw) ? "error" : "warning"),
   },
   {
     id: "new-function",
@@ -167,8 +189,10 @@ const RULES: SecurityRule[] = [
     languages: ["python"],
     description: "Use of eval()/exec()",
     // exec(compile(...)) loads a trusted file on purpose (config loaders, shells)
-    test: ({ code }) =>
-      /(?<![\w.])(?:eval|exec)\s*\((?!\s*compile\s*\()/.test(code),
+    test: ({ code, raw }) =>
+      /(?<![\w.])(?:eval|exec)\s*\((?!\s*compile\s*\()/.test(code) &&
+      !/^\s*(?:async\s+)?def\s/.test(code) &&
+      (USER_INPUT.test(raw) ? "error" : "warning"),
   },
   {
     id: "eval-ruby-php",
@@ -176,7 +200,10 @@ const RULES: SecurityRule[] = [
     severity: "error",
     languages: ["ruby", "php"],
     description: "Use of eval()",
-    test: ({ code }) => /(?<![\w$.])eval\s*\(/.test(code),
+    test: ({ code, raw }) =>
+      /(?<![\w$.])eval\s*\(/.test(code) &&
+      !/^\s*(?:def|function)\s/.test(code) &&
+      (USER_INPUT.test(raw) ? "error" : "warning"),
   },
   {
     id: "sql-injection",
@@ -270,7 +297,7 @@ function shouldSkipFile(filePath: string, moduleType: string): boolean {
   if (filePath.endsWith(".d.ts")) return true;
   if (/\.env\.example$|\.env\.sample$|\.env\.template$/i.test(filePath)) return true;
   // Fixtures, mocks, seed data and examples contain intentional patterns
-  if (/(^|[/\\])(?:__fixtures__|fixtures?|__mocks__|mocks?|test-data|testdata|seeds?|examples?)[/\\]/i.test(filePath)) {
+  if (/(^|[/\\])(?:__fixtures__|fixtures?|__mocks__|mocks?|test-data|testdata|seeds?|examples?|docs?)[/\\]/i.test(filePath)) {
     return true;
   }
   return false;

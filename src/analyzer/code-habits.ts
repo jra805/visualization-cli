@@ -133,6 +133,8 @@ export function inspectCodeHabits(graph: Graph, inv: RepoInventory): Issue[] {
 // ── Backup copies ─────────────────────────────────────────────────────────
 
 const BULK_DIR = /(^|\/)(node_modules|bower_components|vendor|venv|\.venv|site-packages|dist|build)\//;
+/** Test fixtures deliberately contain odd files (a `backup~` to test ignore rules). */
+const FIXTURE_DIR = /(^|\/)(tests?|__tests__|spec|fixtures?|__fixtures__|testdata)\//;
 
 /** "server_old.js", "users copy.js", "old-navbar.js", "app (1).py" → original stem */
 function originalStem(stem: string): string | null {
@@ -155,13 +157,13 @@ function findBackupFiles(inv: RepoInventory): { issues: Issue[]; files: Set<stri
   for (const f of inv.files) lower.set(f.toLowerCase(), f);
 
   for (const f of inv.files) {
-    if (BULK_DIR.test(f)) continue;
+    if (BULK_DIR.test(f) || FIXTURE_DIR.test(f)) continue;
     const dir = f.includes("/") ? f.slice(0, f.lastIndexOf("/") + 1) : "";
     const name = f.slice(dir.length);
     let original: string | undefined;
 
-    if (/\.(bak|orig|old)$/i.test(name) || /[^/]~$/.test(name)) {
-      original = name.replace(/\.(bak|orig|old)$/i, "").replace(/~$/, "");
+    if (/\.(bak|orig|old)$/i.test(name)) {
+      original = name.replace(/\.(bak|orig|old)$/i, "");
       original = lower.get((dir + original).toLowerCase()) ? dir + original : `${dir}${original} (deleted)`;
     } else {
       const ext = path.extname(name);
@@ -204,7 +206,7 @@ function isGenerated(id: string, src: string): boolean {
 
 /** Files that are expected to look alike across a project. */
 function isDuplicateCandidate(id: string): boolean {
-  return !/(^|\/)(__init__\.py|index\.[cm]?[jt]sx?|migrations?\/|fixtures?\/|examples?\/|templates?\/|__mocks__\/|public\/|static\/)|\.(stories|story)\.[cm]?[jt]sx?$/.test(
+  return !/(^|\/)(__init__\.py|index\.[cm]?[jt]sx?|migrations?\/|fixtures?\/|examples?\/|templates?\/|__mocks__\/|public\/|static\/|locales?\/|i18n\/|translations?\/)|\.(stories|story)\.[cm]?[jt]sx?$/.test(
     id,
   );
 }

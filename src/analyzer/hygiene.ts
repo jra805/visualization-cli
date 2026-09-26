@@ -381,7 +381,7 @@ function committedJunk(
 ): Issue[] {
   const hits = new Map<string, { ignore: string; files: string[] }>();
   for (const f of inv.files) {
-    if (inBulkDir(f)) continue;
+    if (inBulkDir(f) || FIXTURE_DIR.test(f)) continue;
     const rule = JUNK_RULES.find((r) => r.re.test(f));
     if (!rule) continue;
     const h = hits.get(rule.label) ?? { ignore: rule.ignore, files: [] };
