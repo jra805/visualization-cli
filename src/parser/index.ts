@@ -7,12 +7,23 @@ import { getParsersForLanguages } from "./parser-registry.js";
 import { parseComponents } from "./component-parser.js";
 import { parseDataFlows } from "./data-flow-parser.js";
 import { classifyByContent } from "./content-classifier.js";
+import { findCycleGroups, type CycleGroup } from "../analyzer/circular.js";
 
 export interface FullParseResult {
   graph: Graph;
+  /** Shortest concrete loop per tangle of files (parallel to cycleGroups). */
   circularDeps: string[][];
+  cycleGroups: CycleGroup[];
   parseResult: ParseResult;
 }
+
+/**
+ * Languages whose import statements name individual files, so the graph is a
+ * fact rather than a guess. Go, Java, C#, Rust, PHP and Ruby import packages or
+ * namespaces (or autoload), so "unused file" and "circular import" verdicts
+ * for them would mostly be false alarms.
+ */
+export const FILE_LEVEL_IMPORT_LANGUAGES = new Set(["javascript", "typescript", "python"]);
 
 export async function parse(
   scanResult: ScanResult,
@@ -21,7 +32,6 @@ export async function parse(
   const { rootDir, files, languages, framework } = scanResult;
 
   const graph = createGraph();
-  let allCircularDeps: string[][] = [];
 
   // Select parsers based on detected languages
   const parsers = getParsersForLanguages(languages);
@@ -43,9 +53,6 @@ export async function parse(
       }
       for (const edge of result.edges) {
         addEdge(graph, edge);
-      }
-      if (result.circularDeps) {
-        allCircularDeps.push(...result.circularDeps);
       }
     } catch {
       context?.warnings.push({
@@ -118,9 +125,15 @@ export async function parse(
     }
   }
 
+  const trusted = [...graph.nodes.values()].filter(
+    (n) => n.language && FILE_LEVEL_IMPORT_LANGUAGES.has(n.language),
+  );
+  const cycleGroups = findCycleGroups(trusted, graph.edges);
+
   return {
     graph,
-    circularDeps: allCircularDeps,
+    circularDeps: cycleGroups.map((g) => g.cycle),
+    cycleGroups,
     parseResult: {
       modules: [],
       components,

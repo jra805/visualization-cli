@@ -17,7 +17,8 @@ describe("analyzer", () => {
       const issues = detectCircularDeps(cycles);
       expect(issues).toHaveLength(1);
       expect(issues[0].type).toBe("circular-dependency");
-      expect(issues[0].severity).toBe("error");
+      expect(issues[0].severity).toBe("warning");
+      expect(issues[0].message).toContain("a.ts → b.ts → c.ts → a.ts");
     });
 
     it("returns empty for no cycles", () => {
@@ -27,57 +28,43 @@ describe("analyzer", () => {
   });
 
   describe("orphan detection", () => {
-    it("detects orphan modules", () => {
-      const graph = createGraph();
-      addNode(graph, {
-        id: "orphan.ts",
-        filePath: "orphan.ts",
-        label: "orphan",
-        moduleType: "util",
-        loc: 10,
-        directory: "",
-      });
-      addNode(graph, {
-        id: "used.ts",
-        filePath: "used.ts",
-        label: "used",
-        moduleType: "util",
-        loc: 10,
-        directory: "",
-      });
-      addEdge(graph, { source: "index.ts", target: "used.ts", type: "import" });
-
-      const { orphans } = detectOrphans(graph, []);
-      expect(orphans).toContain("orphan.ts");
-      expect(orphans).not.toContain("used.ts");
+    const ts = (id: string, moduleType: GraphNode["moduleType"] = "util"): GraphNode => ({
+      id,
+      filePath: id,
+      label: id,
+      moduleType,
+      loc: 10,
+      directory: "",
+      language: "typescript",
     });
 
-    it("does not count modules with outgoing connections as orphans", () => {
+    it("detects files nothing imports", () => {
       const graph = createGraph();
-      addNode(graph, {
-        id: "top-level.ts",
-        filePath: "top-level.ts",
-        label: "top-level",
-        moduleType: "component",
-        loc: 50,
-        directory: "",
-      });
-      addNode(graph, {
-        id: "dep.ts",
-        filePath: "dep.ts",
-        label: "dep",
-        moduleType: "util",
-        loc: 20,
-        directory: "",
-      });
-      addEdge(graph, {
-        source: "top-level.ts",
-        target: "dep.ts",
-        type: "import",
-      });
+      addNode(graph, ts("src/orphan.ts"));
+      addNode(graph, ts("src/used.ts"));
+      addNode(graph, ts("src/index.ts", "entry-point"));
+      addEdge(graph, { source: "src/index.ts", target: "src/used.ts", type: "import" });
 
-      const { orphans } = detectOrphans(graph, []);
-      expect(orphans).not.toContain("top-level.ts");
+      const { orphans, issues } = detectOrphans(graph, []);
+      expect(orphans).toEqual(["src/orphan.ts"]);
+      expect(issues[0].message).toBe("Nothing imports src/orphan.ts");
+    });
+
+    it("flags an unimported file even if it imports others (dead code still has deps)", () => {
+      const graph = createGraph();
+      addNode(graph, ts("src/oldHelpers.ts"));
+      addNode(graph, ts("src/constants.ts"));
+      addNode(graph, ts("src/main.ts", "entry-point"));
+      addEdge(graph, { source: "src/oldHelpers.ts", target: "src/constants.ts", type: "import" });
+      addEdge(graph, { source: "src/main.ts", target: "src/constants.ts", type: "import" });
+
+      expect(detectOrphans(graph, []).orphans).toEqual(["src/oldHelpers.ts"]);
+    });
+
+    it("treats root-level JS files and Python scripts as things you run", () => {
+      const graph = createGraph();
+      addNode(graph, ts("bot.js"));
+      expect(detectOrphans(graph, []).orphans).toEqual([]);
     });
 
     it("does not count framework entry points as orphans", () => {
@@ -90,36 +77,33 @@ describe("analyzer", () => {
         { id: "app/api/route.ts", moduleType: "api-route" as const },
         { id: "users.controller.ts", moduleType: "controller" as const },
       ];
-      for (const { id, moduleType } of standaloneTypes) {
-        addNode(graph, {
-          id,
-          filePath: id,
-          label: id,
-          moduleType,
-          loc: 20,
-          directory: "",
-        });
-      }
+      for (const { id, moduleType } of standaloneTypes) addNode(graph, ts(id, moduleType));
+      addNode(graph, ts("app/dashboard/loading.tsx"));
+      addNode(graph, ts("src/Button.stories.tsx"));
+      addNode(graph, ts("scripts/seed.ts"));
 
-      const { orphans } = detectOrphans(graph, []);
-      for (const { id } of standaloneTypes) {
-        expect(orphans).not.toContain(id);
-      }
+      expect(detectOrphans(graph, []).orphans).toEqual([]);
     });
 
-    it("does not count entry points as orphans", () => {
+    it("does not count declared entry points as orphans", () => {
       const graph = createGraph();
-      addNode(graph, {
-        id: "index.ts",
-        filePath: "index.ts",
-        label: "index",
-        moduleType: "page",
-        loc: 10,
-        directory: "",
-      });
+      addNode(graph, ts("src/main.tsx"));
+      expect(detectOrphans(graph, ["src/main.tsx"]).orphans).toEqual([]);
+    });
 
-      const { orphans } = detectOrphans(graph, ["index.ts"]);
-      expect(orphans).not.toContain("index.ts");
+    it("never flags Python package and convention files", () => {
+      const graph = createGraph();
+      for (const id of ["pkg/__init__.py", "tests/conftest.py", "mysite/settings.py", "mysite/urls.py"]) {
+        addNode(graph, { ...ts(id), language: "python" });
+      }
+      expect(detectOrphans(graph, []).orphans).toEqual([]);
+    });
+
+    it("stays silent for languages whose imports aren't file-level", () => {
+      const graph = createGraph();
+      addNode(graph, { ...ts("Main.java"), language: "java" });
+      addNode(graph, { ...ts("main.go"), language: "go" });
+      expect(detectOrphans(graph, []).orphans).toEqual([]);
     });
   });
 
@@ -330,7 +314,8 @@ describe("analyzer", () => {
         (i) => i.type === "god-module" && i.files[0] === "main.py",
       );
       expect(godIssues).toHaveLength(1);
-      expect(godIssues[0].message).toContain("fan-out 18");
+      expect(godIssues[0].message).toContain("Imports 18");
+      expect(godIssues[0].evidence!.join(" ")).toContain("fan-out 18");
     });
 
     it("entry-point is exempt from fan-out god-module check", () => {
@@ -362,95 +347,103 @@ describe("analyzer", () => {
       expect(godIssues).toHaveLength(0);
     });
 
-    it("god-module LOC threshold adapts to project median", () => {
+    it("flags files over the absolute size threshold regardless of project median", () => {
       const graph = createGraph();
-      // File at 1200 LOC — above default 1000 threshold
       addNode(graph, {
-        id: "big.ts",
-        filePath: "big.ts",
-        label: "big",
-        moduleType: "service",
-        loc: 1200,
+        id: "App.js",
+        filePath: "App.js",
+        label: "App",
+        moduleType: "component",
+        loc: 600,
         directory: "",
+        language: "javascript",
       });
-      // Create many nodes with median ~500 LOC so adaptive threshold = max(1500, 1000) = 1500
-      for (let i = 0; i < 20; i++) {
+      // A project full of big files must not raise the bar
+      for (let i = 0; i < 9; i++) {
         addNode(graph, {
-          id: `mod${i}.ts`,
-          filePath: `mod${i}.ts`,
-          label: `mod${i}`,
+          id: `big${i}.js`,
+          filePath: `big${i}.js`,
+          label: `big${i}`,
           moduleType: "util",
-          loc: 500,
+          loc: 450,
           directory: "",
+          language: "javascript",
         });
       }
-      const { issues } = analyzeCoupling(graph);
-      const godIssues = issues.filter(
-        (i) => i.type === "god-module" && i.files[0] === "big.ts",
-      );
-      // 1200 < 1500 adaptive threshold, so NOT flagged
-      expect(godIssues).toHaveLength(0);
+      const godIssues = analyzeCoupling(graph).issues.filter((i) => i.type === "god-module");
+      expect(godIssues.map((i) => i.files[0])).toEqual(["App.js"]);
+      expect(godIssues[0].message).toContain("600 lines");
     });
 
-    it("god-module LOC threshold uses base floor when median is low", () => {
+    it("does not size-flag tests, migrations or schema files", () => {
       const graph = createGraph();
-      addNode(graph, {
-        id: "big.ts",
-        filePath: "big.ts",
-        label: "big",
-        moduleType: "service",
-        loc: 1100,
-        directory: "",
-      });
-      // Low median (~50 LOC) → adaptive = max(150, 1000) = 1000
-      for (let i = 0; i < 20; i++) {
+      for (const moduleType of ["test", "migration", "schema"] as const) {
         addNode(graph, {
-          id: `mod${i}.ts`,
-          filePath: `mod${i}.ts`,
-          label: `mod${i}`,
-          moduleType: "util",
-          loc: 50,
+          id: `${moduleType}.py`,
+          filePath: `${moduleType}.py`,
+          label: moduleType,
+          moduleType,
+          loc: 2000,
           directory: "",
+          language: "python",
         });
       }
-      const { issues } = analyzeCoupling(graph);
-      const godIssues = issues.filter(
-        (i) => i.type === "god-module" && i.files[0] === "big.ts",
-      );
-      // 1100 > 1000 floor, so flagged
-      expect(godIssues).toHaveLength(1);
+      expect(analyzeCoupling(graph).issues).toHaveLength(0);
     });
 
     it("combines fanOut and LOC into single god-module issue", () => {
       const graph = createGraph();
       addNode(graph, {
-        id: "big.ts",
-        filePath: "big.ts",
-        label: "big",
+        id: "god.ts",
+        filePath: "god.ts",
+        label: "god",
         moduleType: "service",
         loc: 1500,
         directory: "",
+        language: "typescript",
       });
       for (let i = 0; i < 25; i++) {
-        const target = `dep${i}.ts`;
         addNode(graph, {
-          id: target,
-          filePath: target,
+          id: `dep${i}.ts`,
+          filePath: `dep${i}.ts`,
           label: `dep${i}`,
           moduleType: "util",
           loc: 10,
           directory: "",
+          language: "typescript",
         });
-        addEdge(graph, { source: "big.ts", target, type: "import" });
+        addEdge(graph, { source: "god.ts", target: `dep${i}.ts`, type: "import" });
       }
-      const { issues } = analyzeCoupling(graph);
-      const godIssues = issues.filter(
-        (i) => i.type === "god-module" && i.files[0] === "big.ts",
-      );
+      const godIssues = analyzeCoupling(graph).issues.filter((i) => i.type === "god-module");
       expect(godIssues).toHaveLength(1);
-      expect(godIssues[0].message).toContain("AND");
-      expect(godIssues[0].message).toContain("fan-out");
-      expect(godIssues[0].message).toContain("LOC");
+      expect(godIssues[0].message).toContain("1500 lines");
+      expect(godIssues[0].evidence!.join(" ")).toContain("fan-out 25");
+    });
+
+    it("ignores fan-out for languages whose imports aren't file-level", () => {
+      const graph = createGraph();
+      addNode(graph, {
+        id: "Svc.cs",
+        filePath: "Svc.cs",
+        label: "Svc",
+        moduleType: "service",
+        loc: 100,
+        directory: "",
+        language: "csharp",
+      });
+      for (let i = 0; i < 40; i++) {
+        addNode(graph, {
+          id: `M${i}.cs`,
+          filePath: `M${i}.cs`,
+          label: `M${i}`,
+          moduleType: "model",
+          loc: 10,
+          directory: "",
+          language: "csharp",
+        });
+        addEdge(graph, { source: "Svc.cs", target: `M${i}.cs`, type: "import" });
+      }
+      expect(analyzeCoupling(graph).issues).toHaveLength(0);
     });
   });
 

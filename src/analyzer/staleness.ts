@@ -1,7 +1,5 @@
-import { execSync } from "node:child_process";
-import path from "node:path";
 import type { Graph } from "../graph/types.js";
-import { GIT_MAX_BUFFER } from "./git-utils.js";
+import { runGit } from "./git-utils.js";
 
 export type StaleLevel = "active" | "dusty" | "abandoned";
 
@@ -25,17 +23,12 @@ export function detectStaleness(
 ): Map<string, StalenessData> {
   const result = new Map<string, StalenessData>();
 
-  // Get last commit date for all files in one call
-  let stdout: string;
-  try {
-    stdout = execSync(`git log --format="%aI" --name-only --diff-filter=ACMR`, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      maxBuffer: GIT_MAX_BUFFER,
-    });
-  } catch {
-    return result;
-  }
+  // Get last commit date for all files in one call (paths relative to rootDir)
+  const stdout = runGit(
+    ["log", "--relative", "--format=%aI", "--name-only", "--diff-filter=ACMR"],
+    rootDir,
+  );
+  if (stdout === null) return result;
 
   // Parse: track most recent commit date per file
   const lastDates = new Map<string, string>();
@@ -49,10 +42,9 @@ export function detectStaleness(
     if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) {
       currentDate = trimmed;
     } else if (currentDate) {
-      const absPath = path.resolve(rootDir, trimmed);
       // Only keep the first (most recent) date for each file
-      if (!lastDates.has(absPath)) {
-        lastDates.set(absPath, currentDate);
+      if (!lastDates.has(trimmed)) {
+        lastDates.set(trimmed, currentDate);
       }
     }
   }

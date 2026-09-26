@@ -8,7 +8,10 @@ const RULES: {
 }[] = [
   // ── Test (highest priority) ──
   {
-    test: (l) => /\.(test|spec)\./.test(l) || l.includes("__tests__"),
+    test: (l) =>
+      /\.(test|spec|cy|e2e)\./.test(l) ||
+      l.includes("__tests__") ||
+      /\/(e2e|cypress|playwright)\//.test(l),
     type: "test",
   },
   // Python tests
@@ -16,7 +19,8 @@ const RULES: {
     test: (l) =>
       /\/_?test[_s]?\//.test(l) ||
       /_test\.py$/.test(l) ||
-      /test_\w+\.py$/.test(l),
+      /test_\w+\.py$/.test(l) ||
+      /\/tests\.py$/.test(l),
     type: "test",
   },
   // Go tests
@@ -158,6 +162,10 @@ const RULES: {
   {
     test: (l) => /\/migrations\//.test(l) && l.endsWith(".py"),
     type: "migration",
+  },
+  {
+    test: (l) => /\/(main|app|run|server|cli|__main__)\.py$/.test(l),
+    type: "entry-point",
   },
 
   // ── Go patterns ──
@@ -310,6 +318,8 @@ const RULES: {
   { test: (l) => /\/directives?\//.test(l), type: "directive" },
 
   // ── Existing frontend patterns ──
+  // React Router / Remix keep page components in routes/
+  { test: (l) => /\/routes?\/.*\.(jsx|tsx|vue|svelte)$/.test(l), type: "page" },
   {
     test: (l) => l.includes("/api/") || l.includes("/routes/"),
     type: "api-route",
@@ -334,24 +344,28 @@ const RULES: {
   },
 
   {
-    test: (l) =>
-      l.includes("/context/") ||
-      l.includes("context.ts") ||
-      l.includes("provider.ts"),
+    // React-style contexts: a contexts/ folder, or PascalCase *Context / *Provider files
+    test: (l, o) =>
+      /\/contexts?\//.test(l) ||
+      /\/[A-Z]\w*(Context|Provider)\.[cm]?[jt]sx?$/.test(o),
     type: "context",
   },
 
   {
     test: (l) =>
-      l.includes("/store") ||
-      l.includes("slice.ts") ||
-      l.includes("reducer.ts"),
+      /\/stores?\//.test(l) ||
+      /\/store\.[cm]?[jt]sx?$/.test(l) ||
+      /slice\.[cm]?[jt]sx?$/.test(l) ||
+      /reducers?\.[cm]?[jt]sx?$/.test(l),
     type: "store",
   },
 
   {
     test: (l) =>
-      l.includes("/types") || l.endsWith(".types.ts") || l.endsWith(".d.ts"),
+      /\/types?\//.test(l) ||
+      /\/types?\.[cm]?[jt]sx?$/.test(l) ||
+      l.endsWith(".types.ts") ||
+      l.endsWith(".d.ts"),
     type: "type",
   },
 
@@ -363,18 +377,21 @@ const RULES: {
 
   // ── Utilities ──
   {
-    test: (l) =>
-      l.includes("/utils/") || l.includes("/lib/") || l.includes("/helpers/"),
+    test: (l) => /\/(utils?|lib|libs|helpers?|shared|common)\//.test(l),
     type: "util",
   },
 
   // ── Entry points (low priority) ──
   {
     test: (l) =>
-      /\/(main|server|app)\.[tj]sx?$/.test(l) ||
-      /^(main|server|app)\.[tj]sx?$/.test(l),
+      /\/(main|server|app|cli)\.[cm]?[tj]sx?$/.test(l) ||
+      // index file at the project root or directly under src/
+      /^\/(src\/)?index\.[cm]?[tj]sx?$/.test(l) ||
+      /\/bin\/[^/]+\.[cm]?[jt]s$/.test(l),
     type: "entry-point",
   },
+  // CLI subcommands behave like request handlers
+  { test: (l) => /\/commands?\/[^/]+\.[cm]?[jt]s$/.test(l), type: "handler" },
 
   // ── Components (broad, near bottom) ──
   {
@@ -385,15 +402,22 @@ const RULES: {
 
   // ── Vue/Svelte single-file components ──
   {
-    test: (l) => l.endsWith(".vue") || l.endsWith(".svelte"),
+    test: (l) =>
+      l.endsWith(".vue") || l.endsWith(".svelte") || l.endsWith(".astro"),
     type: "component",
   },
 ];
 
+/**
+ * Classify a file by path conventions. `filePath` is relative to the project
+ * root (e.g. "tests/foo.py"); it is matched with a leading "/" so directory
+ * rules like /\/tests?\// also fire for top-level folders.
+ */
 export function classifyModule(filePath: string): ModuleType {
-  const lower = filePath.toLowerCase();
+  const original = "/" + filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const lower = original.toLowerCase();
   for (const rule of RULES) {
-    if (rule.test(lower, filePath)) return rule.type;
+    if (rule.test(lower, original)) return rule.type;
   }
   return "unknown";
 }

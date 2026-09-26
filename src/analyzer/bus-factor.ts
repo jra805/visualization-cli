@@ -1,8 +1,5 @@
-import { execSync } from "node:child_process";
-import path from "node:path";
 import type { Graph } from "../graph/types.js";
-import { normalizePath } from "../utils/paths.js";
-import { GIT_MAX_BUFFER } from "./git-utils.js";
+import { runGit } from "./git-utils.js";
 
 export interface BusFactorData {
   file: string;
@@ -21,16 +18,12 @@ export function detectBusFactors(
 ): Map<string, BusFactorData> {
   const result = new Map<string, BusFactorData>();
 
-  // Get all authors + commit counts in one git call
-  let stdout: string;
-  try {
-    stdout = execSync(
-      `git log --since="12 months ago" --format="%aN|||%H" --name-only`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER },
-    );
-  } catch {
-    return result;
-  }
+  // Get all authors + commit counts in one git call (paths relative to rootDir)
+  const stdout = runGit(
+    ["log", "--relative", "--since=12 months ago", "--format=%aN|||%H", "--name-only"],
+    rootDir,
+  );
+  if (stdout === null) return result;
 
   // Parse: build per-file author commit counts
   const fileAuthors = new Map<string, Map<string, number>>();
@@ -43,18 +36,17 @@ export function detectBusFactors(
     if (trimmed.includes("|||")) {
       currentAuthor = trimmed.split("|||")[0];
     } else if (currentAuthor) {
-      const absPath = normalizePath(path.resolve(rootDir, trimmed));
-      if (!fileAuthors.has(absPath)) {
-        fileAuthors.set(absPath, new Map());
+      if (!fileAuthors.has(trimmed)) {
+        fileAuthors.set(trimmed, new Map());
       }
-      const authors = fileAuthors.get(absPath)!;
+      const authors = fileAuthors.get(trimmed)!;
       authors.set(currentAuthor, (authors.get(currentAuthor) ?? 0) + 1);
     }
   }
 
   // Compute bus factor for files in the graph
   for (const [nodeId] of graph.nodes) {
-    const authorMap = fileAuthors.get(normalizePath(nodeId));
+    const authorMap = fileAuthors.get(nodeId);
     if (!authorMap || authorMap.size === 0) continue;
 
     const totalCommits = [...authorMap.values()].reduce((a, b) => a + b, 0);

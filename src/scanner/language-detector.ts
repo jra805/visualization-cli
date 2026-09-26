@@ -137,6 +137,11 @@ export function getFileLanguage(filePath: string): Language | undefined {
   const map: Record<string, Language> = {
     ".ts": "typescript",
     ".tsx": "typescript",
+    ".mts": "typescript",
+    ".cts": "typescript",
+    ".vue": "javascript",
+    ".svelte": "javascript",
+    ".astro": "javascript",
     ".js": "javascript",
     ".jsx": "javascript",
     ".mjs": "javascript",

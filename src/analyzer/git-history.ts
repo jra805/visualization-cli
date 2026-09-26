@@ -1,6 +1,4 @@
-import { execSync } from "node:child_process";
-import path from "node:path";
-import { GIT_MAX_BUFFER } from "./git-utils.js";
+import { runGit } from "./git-utils.js";
 
 export interface FileChangeFrequency {
   filePath: string;
@@ -15,23 +13,24 @@ export interface CoChange {
   confidence: number; // coChangeCount / max(changesA, changesB)
 }
 
+/** Commits touching more files than this are bulk edits (renames, formatting, initial import) and say nothing about coupling. */
+const MAX_FILES_PER_COMMIT = 30;
+
 /**
- * Parse git log to count how many commits touched each file in the last N months.
+ * Count how many of the last N commits touched each file.
+ * Keys are paths relative to `rootDir`, matching graph node IDs.
  */
 export function getChangeFrequencies(
   rootDir: string,
-  months: number = 6,
+  maxCommits: number = 500,
 ): Map<string, FileChangeFrequency> {
-  let stdout: string;
-  try {
-    stdout = execSync(
-      `git log --name-only --pretty=format:"" --since="${months} months ago"`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER },
-    );
-  } catch {
-    // Not a git repo or git not available
-    return new Map();
-  }
+  // A window of recent commits rather than recent months: a class project
+  // built in two weeks last year still has a meaningful history
+  const stdout = runGit(
+    ["log", "--relative", "--name-only", "--pretty=format:", `--max-count=${maxCommits}`],
+    rootDir,
+  );
+  if (stdout === null) return new Map();
 
   const counts = new Map<string, number>();
   for (const line of stdout.split("\n")) {
@@ -46,9 +45,8 @@ export function getChangeFrequencies(
 
   const result = new Map<string, FileChangeFrequency>();
   for (const [filePath, changeCount] of counts) {
-    const absolute = path.resolve(rootDir, filePath);
-    result.set(absolute, {
-      filePath: absolute,
+    result.set(filePath, {
+      filePath,
       changeCount,
       normalized: maxCount > 0 ? changeCount / maxCount : 0,
     });
@@ -59,21 +57,17 @@ export function getChangeFrequencies(
 
 /**
  * Find files that co-change in the same commits.
- * Used by Feature 2 (Temporal Coupling).
+ * Keys are paths relative to `rootDir`, matching graph node IDs.
  */
 export function getCoChangedFiles(
   rootDir: string,
-  months: number = 6,
+  maxCommits: number = 500,
 ): CoChange[] {
-  let stdout: string;
-  try {
-    stdout = execSync(
-      `git log --name-only --pretty=format:"---COMMIT---" --since="${months} months ago"`,
-      { cwd: rootDir, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER },
-    );
-  } catch {
-    return [];
-  }
+  const stdout = runGit(
+    ["log", "--relative", "--name-only", "--pretty=format:---COMMIT---", `--max-count=${maxCommits}`],
+    rootDir,
+  );
+  if (stdout === null) return [];
 
   // Parse commits
   const commits: string[][] = [];
@@ -87,7 +81,7 @@ export function getCoChangedFiles(
       }
       currentFiles = [];
     } else if (trimmed) {
-      currentFiles.push(path.resolve(rootDir, trimmed));
+      currentFiles.push(trimmed);
     }
   }
   if (currentFiles.length > 0) {
@@ -99,11 +93,11 @@ export function getCoChangedFiles(
   const pairCounts = new Map<string, number>();
 
   for (const files of commits) {
-    for (const f of files) {
+    const unique = [...new Set(files)].sort();
+    for (const f of unique) {
       fileCounts.set(f, (fileCounts.get(f) ?? 0) + 1);
     }
-    // Count pairs (only unique pairs per commit)
-    const unique = [...new Set(files)].sort();
+    if (unique.length > MAX_FILES_PER_COMMIT) continue;
     for (let i = 0; i < unique.length; i++) {
       for (let j = i + 1; j < unique.length; j++) {
         const key = `${unique[i]}|||${unique[j]}`;
