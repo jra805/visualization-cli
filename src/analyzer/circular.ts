@@ -21,7 +21,7 @@ export function detectCircularDeps(
       type: "circular-dependency" as const,
       severity: "warning" as const,
       message:
-        `Circular import: ${steps.map(baseName).join(" → ")}` +
+        steps.map(baseName).join(" → ") +
         (extra > 0 ? ` (+${extra} more files in the same tangle)` : ""),
       files: members,
       evidence: cycle.map((f, j) => `${f} imports ${steps[j + 1]}`),

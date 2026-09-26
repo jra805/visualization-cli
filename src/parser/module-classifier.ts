@@ -381,6 +381,9 @@ const RULES: {
     type: "util",
   },
 
+  // React convention: App.jsx is the root component (index/main.jsx is the entry)
+  { test: (_l, o) => /\/App\.[cm]?[jt]sx?$/.test(o), type: "component" },
+
   // ── Entry points (low priority) ──
   {
     test: (l) =>

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { exec } from "node:child_process";
+import { spawn } from "node:child_process";
 import type { Graph } from "../graph/types.js";
 import type { ArchReport } from "../analyzer/types.js";
 import type { ComponentInfo, ComponentDataFlow } from "../parser/types.js";
@@ -13,6 +13,17 @@ import type { MapState } from "./game-map/map-state.js";
 import { loadMapState, saveMapState } from "./game-map/map-state.js";
 import { generateTreemapHtml } from "./treemap/index.js";
 import { generateSvg } from "./svg/index.js";
+import { generateCityHtml } from "./city/index.js";
+
+/** Default file name for each format when --output points at a folder. */
+export const DEFAULT_FILENAMES: Record<string, string> = {
+  city: "city.html",
+  mermaid: "architecture.html",
+  game: "game-map.html",
+  treemap: "treemap.html",
+  svg: "architecture.svg",
+  interactive: "interactive.html",
+};
 
 /** Check that an output directory doesn't contain source files before overwriting */
 function assertSafeOutputDir(dirPath: string): void {
@@ -34,27 +45,19 @@ function assertSafeOutputDir(dirPath: string): void {
   }
 }
 
+/**
+ * Write the requested format and return the path of the file written.
+ * Opening it in a browser is the caller's decision (see openInBrowser).
+ */
 export async function render(
   graph: Graph,
   report: ArchReport,
   components: ComponentInfo[],
   dataFlows: ComponentDataFlow[],
   options: RenderOptions,
-): Promise<void> {
-  const format = options.format ?? "interactive";
+): Promise<string> {
+  const format = options.format ?? "city";
   let outputPath: string;
-
-  // Determine default filename per format
-  const defaultFilename =
-    format === "mermaid"
-      ? "architecture.html"
-      : format === "game"
-        ? "game-map.html"
-        : format === "treemap"
-          ? "treemap.html"
-          : format === "svg"
-            ? "architecture.svg"
-            : "interactive.html";
 
   // If outputDir looks like a file path (has a known extension), use it directly
   const ext = path.extname(options.outputDir).toLowerCase();
@@ -69,9 +72,8 @@ export async function render(
     outputPath = options.outputDir;
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   } else {
-    // -o pointed to a directory (or defaulted to targetDir)
     fs.mkdirSync(options.outputDir, { recursive: true });
-    outputPath = path.join(options.outputDir, defaultFilename);
+    outputPath = path.join(options.outputDir, DEFAULT_FILENAMES[format] ?? "city.html");
   }
 
   // If outputPath already exists as a directory (stale from old bug), warn instead of deleting
@@ -80,49 +82,53 @@ export async function render(
     assertSafeOutputDir(outputPath);
   }
 
-  if (format === "mermaid") {
-    const diagrams = generateMermaidDiagrams(
-      graph,
-      report,
-      components,
-      dataFlows,
-    );
+  if (format === "city") {
+    const html = generateCityHtml(graph, report, {
+      name: options.projectName ?? path.basename(options.targetDir ?? process.cwd()),
+    });
+    fs.writeFileSync(outputPath, html, "utf-8");
+  } else if (format === "mermaid") {
+    const diagrams = generateMermaidDiagrams(graph, report, components, dataFlows);
     const html = generateHtml(diagrams, report);
     fs.writeFileSync(outputPath, html, "utf-8");
   } else if (format === "game") {
-    const mapState = options.fresh
-      ? null
-      : loadMapState(options.targetDir ?? ".");
-    const { html, newState } = generateGameMapHtml(
-      graph,
-      report,
-      components,
-      dataFlows,
-      mapState,
-    );
+    const mapState = options.fresh ? null : loadMapState(options.targetDir ?? ".");
+    const { html, newState } = generateGameMapHtml(graph, report, components, dataFlows, mapState);
     fs.writeFileSync(outputPath, html, "utf-8");
     if (!options.noPersist) {
       saveMapState(options.targetDir ?? ".", newState);
     }
   } else if (format === "treemap") {
-    const html = generateTreemapHtml(graph, report);
-    fs.writeFileSync(outputPath, html, "utf-8");
+    fs.writeFileSync(outputPath, generateTreemapHtml(graph, report), "utf-8");
   } else if (format === "svg") {
-    const svg = generateSvg(graph, report);
-    fs.writeFileSync(outputPath, svg, "utf-8");
+    fs.writeFileSync(outputPath, generateSvg(graph, report), "utf-8");
   } else {
     const html = generateInteractiveHtml(graph, report, components, dataFlows);
     fs.writeFileSync(outputPath, html, "utf-8");
   }
 
-  // Open in browser
-  const absPath = path.resolve(outputPath);
-  const cmd =
-    process.platform === "win32"
-      ? `start "" "${absPath}"`
-      : process.platform === "darwin"
-        ? `open "${absPath}"`
-        : `xdg-open "${absPath}"`;
+  return outputPath;
+}
 
-  exec(cmd);
+/**
+ * Open a file with the system's default app. No shell is involved, so odd
+ * characters in the path (it contains the project's folder name) are harmless.
+ * Returns false if no opener could be started.
+ */
+export function openInBrowser(filePath: string): boolean {
+  const abs = path.resolve(filePath);
+  const [cmd, args] =
+    process.platform === "darwin"
+      ? ["open", [abs]]
+      : process.platform === "win32"
+        ? ["explorer.exe", [abs]]
+        : ["xdg-open", [abs]];
+  try {
+    const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+    child.on("error", () => undefined);
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
 }
