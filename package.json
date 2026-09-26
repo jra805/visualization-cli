@@ -1,7 +1,7 @@
 {
   "name": "codescape-cli",
-  "version": "0.1.0",
-  "description": "Analyze projects and generate architecture diagrams",
+  "version": "0.4.0",
+  "description": "See your code as an 8-bit city, and the beginner mistakes it's hiding",
   "type": "module",
   "bin": {
     "codescape": "./dist/index.js"
@@ -15,9 +15,14 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "licenses"
   ],
   "keywords": [
+    "code-quality",
+    "beginner",
+    "pixel-art",
+    "visualization",
     "architecture",
     "diagram",
     "cli",

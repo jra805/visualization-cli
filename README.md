@@ -3,153 +3,157 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
-Analyze any codebase and generate interactive architecture visualizations. Point it at a project directory and get a self-contained HTML file you can open in a browser — no server required.
+**See your code as an 8-bit city, and the beginner mistakes it's hiding.**
 
-**10 languages. 5 output formats. Zero configuration.**
+![codescape: this repository as a city at night](images/city-night.png)
 
-![codescape game map — pixel-art RPG visualization of your codebase](images/main.png)
+codescape turns a repository into a pixel-art city. Every folder is a district, every file is a building, and taller buildings have more lines of code. Problems look like city problems: a landfill where `node_modules` got committed, sirens on hardcoded secrets, red traffic loops for circular imports, and cranes on files that grew too big.
 
-## Features
+It's built for people learning to code. Every problem comes with a plain-English explanation of why it matters and the exact commands to fix it.
 
-- **Multi-language** — JavaScript, TypeScript, Python, Go, Java, Kotlin, Rust, C#, PHP, Ruby
-- **5 output formats** — Interactive graph, pixel-art game map, treemap, SVG circle-packing, Mermaid
-- **Smart analysis** — Circular dependencies, god modules, orphans, layer violations, hotspots, temporal coupling
-- **Framework-aware** — Recognizes 30+ frameworks (React, Next.js, Django, Spring, Rails, etc.)
-- **Zero config** — Works out of the box on any project. Just point and run.
-- **Self-contained output** — Every visualization is a single file with no external dependencies
-
-## Quick Start
+## Quick start
 
 ```bash
-npm install -g codescape-cli
-codescape analyze /path/to/your/project
+npx codescape-cli            # inspect the current folder
+npx codescape-cli path/to/project
 ```
 
-The output opens automatically in your default browser.
+Or install it: `npm install -g codescape-cli`, then run `codescape` in any project. You need Node.js 18+ and, for the checks that look at what's committed, git.
 
-### Install from source
-
-```bash
-git clone https://github.com/jra805/visualization-cli.git
-cd visualization-cli
-npm install
-npm run build
-npm link
-```
-
-### Run
-
-```bash
-codescape analyze /path/to/your/project
-```
-
-The output opens automatically in your default browser.
-
-## Output Formats
-
-| Format          | Flag                   | Description                                       |
-| --------------- | ---------------------- | ------------------------------------------------- |
-| **Interactive** | `--format interactive` | Pan, zoom, click nodes, search — the default      |
-| **Game Map**    | `--format game`        | Pixel-art RPG world map with biome-themed regions |
-| **Treemap**     | `--format treemap`     | Squarified treemap sized by lines of code         |
-| **SVG**         | `--format svg`         | Circle-packing diagram grouped by directory       |
-| **Mermaid**     | `--format mermaid`     | Markdown-compatible flowchart                     |
-
-```bash
-codescape analyze . --format game
-codescape analyze . --format treemap
-codescape analyze . --format svg
-codescape analyze . --format mermaid
-```
-
-## What It Detects
-
-| Issue                 | Description                                                              |
-| --------------------- | ------------------------------------------------------------------------ |
-| Circular dependencies | Tarjan's SCC algorithm for JS/TS, regex-based for all others             |
-| God modules           | Files with excessive fan-in + fan-out                                    |
-| Orphan modules        | Disconnected files (with smart exclusions for expected standalone files) |
-| Layer violations      | e.g., utility modules importing from UI layer                            |
-| Architecture patterns | Detects layered, MVC, hexagonal, and modular patterns                    |
-| Hotspots              | High cyclomatic complexity + frequent git changes                        |
-| Temporal coupling     | Files that consistently change together                                  |
-| Bus factor            | Files with only one contributor (via git history)                        |
-| Stale code            | Files untouched for extended periods                                     |
-
-## CLI Options
+The city opens in your browser, and the terminal prints the Inspector's Report:
 
 ```
-codescape analyze [dir] [options]
+   F   my-first-app — a village of 14 buildings
+      Disaster zone · 30/100
 
-Arguments:
-  dir                      Target project directory (default: ".")
+  FIX NOW (5)
+   ✖ Hardcoded Secret ×3 — config/db.js:4, server_old.js:11, server.js:11
+   ✖ Committed Dependencies — 4 downloaded library files committed in node_modules/
+       $ echo "node_modules/" >> .gitignore
+       $ git rm -r --cached "node_modules"
+   ✖ Committed .env File — .env is committed with 2 secrets: MONGO_URI, JWT_SECRET
 
-Options:
-  -o, --output <dir>       Output directory (default: opens in browser)
-  --focus <path>           Focus on a specific subdirectory
-  --depth <n>              Max directory depth to analyze
-  --no-issues              Skip issue detection, diagrams only
-  --format <type>          interactive | mermaid | game | treemap | svg
-  --group                  Auto-group files by directory and module type
-  --group-config <path>    Path to JSON group configuration file
-  -v, --verbose            Verbose logging
+  SHOULD FIX (14)
+   ▲ Backup Copy ×3 — client/src/components/navbar_old.js, routes/users copy.js, server_old.js
+   ▲ Circular Import — App.js → api.js → App.js
+   ▲ Oversized File — 829 lines of code in one file  (client/src/App.js)
+   ...
 ```
 
-## Examples
+The output is a single HTML file written to a temporary folder, never into your project. It works offline; the pixel fonts are embedded.
 
-```bash
-# Analyze a React app, save output to a directory
-codescape analyze ~/projects/my-app --output ./diagrams
+## Reading the city
 
-# Generate a pixel-art game map of a Go backend
-codescape analyze ~/projects/api-server --format game
+![A beginner's project as a city](images/city-beginner.png)
 
-# Focus on a specific package in a monorepo
-codescape analyze ~/projects/monorepo --focus packages/core
+| You see              | It means                                                   |
+| -------------------- | ---------------------------------------------------------- |
+| A district (block)   | A folder. Sub-folders are neighbourhoods inside it         |
+| A building           | A file. One floor ≈ 25 lines of code                       |
+| **Shop**             | UI: components, pages, layouts                             |
+| **Office**           | Routes, controllers, request handlers, middleware          |
+| **Factory**          | Services: business logic                                   |
+| **Warehouse**        | Data: models, schemas, repositories, migrations            |
+| **Bank**             | State: stores, contexts, hooks                             |
+| **Workshop**         | Helpers, config, types                                     |
+| **City Hall**        | The entry point, where your program starts                 |
+| **Fire station**     | Tests                                                      |
+| **House**            | Everything else                                            |
 
-# Auto-group by directory for large projects
-codescape analyze ~/projects/big-app --group
+Click any building, district or lot to see what it is, what it imports ("gets supplies from"), what imports it, and every problem found there. The **Problems** lens fades out healthy buildings. The **Traffic** lens lights up the files that everything depends on. Press `n` for night mode.
+
+![Inspecting a building](images/city-details.png)
+
+## What the inspector checks
+
+Checks are tuned for precision: a false alarm teaches a beginner the wrong lesson. See [how accurate it is](#how-accurate-is-it).
+
+**Fix now:** things that are actively hurting you.
+
+| Problem                        | In the city            | Caught when                                                                      |
+| ------------------------------ | ---------------------- | -------------------------------------------------------------------------------- |
+| Committed dependencies         | Landfill               | `node_modules/`, a virtualenv, `vendor/bundle` … are tracked by git               |
+| Committed `.env` / credentials | Keys left out          | `.env`, private keys, service-account JSON, `.npmrc` tokens are tracked           |
+| Hardcoded secret               | Siren                  | API keys (AWS, GitHub, OpenAI, Stripe…), database URLs with passwords, `SECRET = "…"` |
+| Injection risk                 | Siren                  | Values pasted into SQL, `eval`/`exec` of user input, shell commands from variables |
+
+**Should fix:** real problems that will bite.
+
+| Problem                                                     | In the city                  |
+| ----------------------------------------------------------- | ---------------------------- |
+| Circular import                                             | Red traffic loop             |
+| Oversized file (500+ lines for UI, 1,000+ otherwise)       | Skyscraper with a crane      |
+| Zoning violation (a helper, model or service imports UI)    | Orange wrong-way route       |
+| Committed build output, database files, large files         | Rubble heap, container yard  |
+| No `.gitignore`, no README, no tests                        | Notice board, blank welcome sign, unbuilt fire station |
+| Backup copies (`server_old.js`, `users copy.js`) and duplicate files | Ghost buildings, clones |
+| Leftover `debugger`, XSS risk, weak password hashing, mixed lockfiles, missing `requirements.txt` | Badges and roadblocks |
+
+**Nice to fix:** unused files, junk files (`.DS_Store`, logs, `.idea/`), a README still from the template, `console.log` graffiti in UI files, hardcoded `localhost` API URLs, wildcard imports, debug mode left on, dev tools in `dependencies`, a cluttered root folder.
+
+Each problem type costs points, with repeats costing less. The total maps to a grade from **A** (thriving city) to **F** (disaster zone), and every fix you make moves it.
+
+## Options
+
+```
+codescape [dir] [options]
+
+  -o, --output <path>      Write here (a folder or a .html file) instead of a temp folder
+  --no-open                Don't open the browser
+  --json                   Print the report as JSON (for CI, graders, scripts)
+  --fail-on <severity>     Exit 1 if there are problems this urgent: error | warning | info
+  --focus <path>           Only analyze a subfolder
+  --depth <n>              Only include files this many folders deep
+  --no-issues              Map only, no inspection
+  --team                   Also check team history: single maintainer, stale files, hidden coupling
+  -v, --verbose            List every problem in the terminal
+  --format <type>          city (default) | game | interactive | treemap | svg | mermaid
 ```
 
-## Interactive Map
+In CI, `codescape --no-open --fail-on error` fails the build when anything "fix now" appears. `--json` gives each problem with its explanation and fix commands.
 
-![codescape interactive dependency graph](images/regular.png)
+## Languages
 
-## Game Map
+The city works for JavaScript, TypeScript (including `.vue`, `.svelte` and `.astro`), Python, Go, Java, Kotlin, Rust, C#, PHP and Ruby. So do the repo-hygiene and security checks.
 
-The game map format renders your codebase as a pixel-art RPG overworld:
+The import-graph checks (circular imports, unused files, zoning) run for **JavaScript, TypeScript and Python**, where an import names a specific file. Go, Java, C#, Rust, PHP and Ruby import packages or namespaces, or autoload files. For those languages, "nothing imports this file" would mostly be a false alarm, so codescape doesn't claim it.
 
-- **Biomes map to architecture** — UI components live in forests, APIs on the coast, data layer in mountains, services in the castle
-- **Building size reflects importance** — PageRank-based sizing
-- **Threats are visible** — Circular deps, orphans, and hotspots appear as visual decay
-- **Multiple lenses** — Switch between Kingdom, Dependencies, Complexity, Hotspots, and Threats views
-- **Interactive** — Click buildings for details, pan/zoom the map, minimap navigation
+## How accurate is it?
 
-![codescape threats lens with inspector](images/threats.png)
+Every check was run against well-maintained projects, where it should stay quiet, and against planted beginner mistakes, where it should catch everything:
 
-## Requirements
+| Project                                   | Files | Grade      | Notes                                            |
+| ----------------------------------------- | ----- | ---------- | ------------------------------------------------ |
+| Express                                   | 141   | A (96)     | Two big files, noted as "nice to fix"             |
+| gothinkster/node-express-realworld        | 36    | A (97)     |                                                  |
+| shadcn/taxonomy (Next.js)                 | 125   | A (91)     | Has no tests, which is true                       |
+| bulletproof-react                         | 412   | B (83)     | The same app is copied three times, which is true |
+| Flask                                     | 83    | C (75)     | Real circular imports and a 1,300-line `app.py`   |
+| djangoproject.com                         | 275   | D (67)     | A real API key committed in settings              |
+| Beginner MERN app (test fixture)          | 14    | F (30)     | All 20+ planted mistakes caught                   |
+| Beginner Flask app (test fixture)         | 5     | F (34)     | All planted mistakes caught                       |
 
-- **Node.js 18+**
-- **git** (for hotspot, temporal coupling, bus factor, and staleness analysis)
+Frameworks that deliberately do risky things score lower than apps do: Django `exec`s code in its shell command and keeps MD5 hashers for legacy passwords. The grade is meant for application code, not framework internals.
 
-## Documentation
+## Other formats
 
-- **[Setup Guide](docs/SETUP.md)** — Detailed getting started guide with language-specific examples
-- **[Contributing](CONTRIBUTING.md)** — Guidelines for adding languages, formats, and analyzers
+The earlier formats are still available with `--format`: `interactive` (dependency graph), `game` (fantasy map), `treemap`, `svg` and `mermaid`. They use the same analysis.
 
 ## Development
 
 ```bash
 npm install
-npm run build          # Compile TypeScript
-npm test               # Run tests (vitest)
-npm run test:watch     # Watch mode
+npm run build      # compile TypeScript (needed before running the CLI)
+npm test           # vitest
+node dist/index.js path/to/project
 ```
+
+The city's browser code lives in `src/renderer/city/client/` as ordinary TypeScript. It's type-checked with everything else and inlined into the page. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [audit and redesign notes](docs/AUDIT.md).
 
 ## Inspiration
 
-This project was inspired by [a post on r/ClaudeAI](https://www.reddit.com/r/ClaudeAI/comments/1rp2qob/i_cant_read_code_so_i_made_claude_code_build_a/) where a user who couldn't read code had Claude Code build a tool to visualize it instead. That idea — making codebases understandable without reading every line — is exactly what codescape is about.
+Inspired by [a post on r/ClaudeAI](https://www.reddit.com/r/ClaudeAI/comments/1rp2qob/i_cant_read_code_so_i_made_claude_code_build_a/) where someone who couldn't read code had Claude Code build a tool to visualize it instead.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The embedded Press Start 2P and VT323 fonts are under the [SIL Open Font License](licenses/).

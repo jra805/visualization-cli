@@ -1,20 +1,19 @@
 # Codescape — AI Assistant Guide
 
-This file helps AI assistants (Claude Code, ChatGPT, Copilot, etc.) guide users through installing and using codescape.
+This file helps AI assistants (Claude Code, ChatGPT, Copilot, etc.) guide users through installing, using and contributing to codescape.
 
 ## What is codescape?
 
-A CLI tool that analyzes any codebase and generates interactive architecture visualizations. It supports 10 languages, 5 output formats, and requires zero configuration.
+A CLI that shows a codebase as an 8-bit pixel-art city and inspects it for the mistakes beginners make. Every folder is a district, every file a building (height = lines of code, style = the file's job), and problems appear as city problems: a landfill for committed `node_modules`, sirens for hardcoded secrets, red traffic loops for circular imports, cranes on oversized files. Every problem comes with a plain-English explanation and fix commands. Zero configuration.
 
 ## Installation
 
-### From npm (recommended)
-
 ```bash
-npm install -g codescape-cli
+npx codescape-cli             # run without installing
+npm install -g codescape-cli  # installs the `codescape` command
 ```
 
-### From source
+From source:
 
 ```bash
 git clone https://github.com/jra805/visualization-cli.git
@@ -24,175 +23,102 @@ npm run build
 npm link
 ```
 
-### Verify installation
-
-```bash
-codescape analyze --help
-```
-
 ## Requirements
 
 - **Node.js 18+** — check with `node --version`
-- **git** — needed for hotspot, temporal coupling, bus factor, and staleness analysis. The target project must be a git repo for these features to work.
+- **git** — the committed-file checks (dependencies, `.env`, build output, junk) and history checks need the target to be a git repository
 
 ## Basic Usage
 
 ```bash
-# Analyze the current directory (opens interactive HTML in browser)
-codescape analyze .
-
-# Analyze a specific project
-codescape analyze /path/to/project
-
-# Save output to a file instead of opening browser
-codescape analyze . --output ./diagrams
+codescape                      # the current folder: prints the report, opens the city
+codescape /path/to/project
+codescape -o ./reports         # write ./reports/city.html instead of a temp folder
+codescape --no-open            # don't open a browser
+codescape --json > report.json # machine-readable report
+codescape --fail-on error      # exit 1 if anything is "fix now" (CI)
 ```
+
+`codescape analyze [dir]` is the same command (kept for compatibility). Output goes to `<os tmp>/codescape/<project>-<hash>/city.html` by default. Nothing is written into the analyzed project.
 
 ## Output Formats
 
-| Format                | Command                                | Best for                                          |
-| --------------------- | -------------------------------------- | ------------------------------------------------- |
-| Interactive (default) | `codescape analyze .`                  | Exploring dependencies, clicking nodes, searching |
-| Game map              | `codescape analyze . --format game`    | Visual overview, presentations, fun               |
-| Treemap               | `codescape analyze . --format treemap` | Understanding file sizes and coupling             |
-| SVG                   | `codescape analyze . --format svg`     | Embedding in docs, circle-packing view            |
-| Mermaid               | `codescape analyze . --format mermaid` | Embedding in GitHub/GitLab markdown               |
+| Format         | Command                                   | Best for                                          |
+| -------------- | ----------------------------------------- | ------------------------------------------------- |
+| City (default) | `codescape`                               | Exploring a project and fixing its problems       |
+| Mermaid        | `codescape --format mermaid -o ./docs`    | Embedding a diagram in GitHub/GitLab markdown     |
+| Interactive    | `codescape --format interactive`          | Legacy dependency graph (loads Cytoscape from a CDN) |
+| Game map       | `codescape --format game`                 | Legacy fantasy map                                |
+| Treemap / SVG  | `codescape --format treemap` / `svg`      | Legacy size and circle-packing views              |
 
-## Language-Specific Setup
+## What the inspector reports
 
-Codescape auto-detects languages. No configuration needed. Here's what it supports and what to expect:
+Problems are grouped by urgency. **Fix now** covers committed dependencies, committed `.env`/credential files, hardcoded secrets and injection risks. **Should fix** covers circular imports, oversized files, zoning violations (a helper/model/service importing UI), committed build output, databases and large files, a missing `.gitignore`/README/tests, backup copies, duplicate files, leftover `debugger`, XSS and weak password hashing. **Nice to fix** covers unused files, junk files, template READMEs, console logs in UI files, hardcoded localhost URLs, wildcard imports, debug mode and dev tools in dependencies. The descriptions live in `src/analyzer/issue-descriptions.ts`.
 
-### JavaScript / TypeScript
+The grade (A–F) uses diminishing penalties per problem type. `--team` adds team-history checks (single maintainer, stale files, hidden coupling); they're off by default because every file in a solo project has one author.
 
-- Parses `import`/`require`/`export` statements
-- Resolves tsconfig/jsconfig path aliases (`@/*`, `baseUrl`, `.js`→`.ts` swap)
-- Detects React components, hooks, props, and data flow (via ts-morph AST)
-- Frameworks: React, Next.js, Vue, Angular, Svelte, Express, Nest, Nuxt, Remix, Gatsby, Astro
+## Language Support
 
-### Python
-
-- Parses `import` and `from ... import` statements
-- Frameworks: Django, Flask, FastAPI, Starlette
-
-### Go
-
-- Parses `import` blocks and single imports
-- Frameworks: Gin, Echo, Fiber, Chi
-
-### Java / Kotlin
-
-- Parses `import` statements and `package` declarations
-- Frameworks: Spring Boot, Micronaut, Quarkus, Ktor
-
-### Rust
-
-- Parses `use`, `mod`, and `extern crate` statements
-- Frameworks: Actix, Rocket, Axum, Warp
-
-### C#
-
-- Parses `using` directives
-- Frameworks: ASP.NET Core, Blazor
-
-### PHP
-
-- Parses `use`, `require`, `include` statements
-- Frameworks: Laravel, Symfony
-
-### Ruby
-
-- Parses `require`, `require_relative`, `load` statements
-- Frameworks: Rails, Sinatra, Hanami
+- **City, hygiene and security checks:** JavaScript, TypeScript (incl. `.vue`, `.svelte`, `.astro`, `.mts`, `.cts`), Python, Go, Java, Kotlin, Rust, C#, PHP, Ruby.
+- **Import-graph checks (circular imports, unused files, zoning):** JavaScript, TypeScript and Python only, where an import names a file. Other languages import packages or namespaces, so these verdicts would be guesses.
+- JS/TS path aliases (tsconfig/jsconfig `paths`, `baseUrl`, `extends`, `references`, per-app configs in monorepos) and Python `src/`/nested layouts are resolved automatically.
 
 ## Common Workflows
 
-### "I just want to see my project's architecture"
+**"Show me my project"**: `codescape`
 
-```bash
-codescape analyze .
-```
+**"My project is huge"**: `codescape --focus src/core` or `codescape --depth 3`
 
-### "My project is huge and the graph is too dense"
+**"Just the map, no inspection"**: `codescape --no-issues`
 
-```bash
-# Focus on a subdirectory
-codescape analyze . --focus src/core
+**"Use it in CI / grade student repos"**: `codescape --no-open --json --fail-on error`
 
-# Limit depth
-codescape analyze . --depth 3
-
-# Auto-group related files
-codescape analyze . --group
-```
-
-### "I want to find problem areas"
-
-```bash
-# Default analysis includes all issue detection
-codescape analyze .
-# Issues shown: circular deps, god modules, orphans, layer violations,
-# hotspots, temporal coupling, bus factor, stale code, security issues
-```
-
-### "I just want a diagram, no analysis"
-
-```bash
-codescape analyze . --no-issues
-```
-
-### "I want to use this in a monorepo"
-
-```bash
-# Analyze the whole monorepo with grouping
-codescape analyze . --group
-
-# Or focus on one package
-codescape analyze . --focus packages/api
-```
-
-### "I want output for documentation"
-
-```bash
-# Mermaid for GitHub/GitLab markdown
-codescape analyze . --format mermaid --output ./docs
-
-# SVG for embedding
-codescape analyze . --format svg --output ./docs
-```
+**"A diagram for docs"**: `codescape --format mermaid -o ./docs`
 
 ## Troubleshooting
 
-| Problem                          | Solution                                                                                                                     |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `codescape: command not found`   | Run `npm install -g codescape-cli` or `npm link` from source checkout                                                        |
-| No files found                   | Check you're pointing at the right directory. Codescape skips `node_modules`, `dist`, `build`, `vendor`, `__pycache__`, etc. |
-| Missing hotspot/bus factor data  | The target directory must be a git repository with history                                                                   |
-| Graph is empty or too small      | The project may be below the minimum threshold, or all files matched ignore patterns                                         |
-| Output doesn't open in browser   | Use `--output ./out` to save to disk instead, then open manually                                                             |
-| "No circular dependencies found" | That's good! Not every project has them                                                                                      |
+| Problem                                   | Solution                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `codescape: command not found`            | `npx codescape-cli`, or `npm install -g codescape-cli`, or `npm link` from a source checkout |
+| No source files found                     | Check the folder. `node_modules`, `dist`, `build`, `venv`, `vendor` and vendored scripts are skipped |
+| No committed-file checks                  | The target must be a git repository (`git init`)                                         |
+| The browser doesn't open                  | Open the printed path, or pass `-o` to choose the location                                |
+| A file is wrongly reported as unused      | Check how it's loaded (routing by file name, string-based loading). Report it: precision is the priority |
 
 ## Development (for contributors)
 
 ```bash
-npm install          # Install dependencies
-npm run build        # Compile TypeScript (required before `codescape` CLI works)
-npm test             # Run all 176 tests
+npm install
+npm run build        # Compile TypeScript (required before the CLI reflects changes)
+npm test             # Run the vitest suite
 npm run test:watch   # Watch mode
+node dist/index.js path/to/project
 ```
 
-Always run `npm run build` after changing TypeScript source before testing with the `codescape` CLI command.
+Always run `npm run build` after changing TypeScript before testing with the `codescape` command.
 
 ## Architecture Overview (for AI assistants helping with contributions)
 
 ```
 src/
-  index.ts              # CLI entry point (commander)
-  commands/analyze.ts   # Main orchestrator: scan → parse → analyze → render
-  scanner/              # File discovery, language detection, framework detection
-  parser/               # Multi-language regex-based parsers (8 languages)
-  graph/                # Dependency graph, grouping, filtering
-  analyzer/             # Issue detection (circular deps, hotspots, coupling, etc.)
-  renderer/             # 5 output formats (interactive, game, treemap, svg, mermaid)
-  utils/                # Shared utilities
-tests/                  # vitest test suite
+  index.ts                  # CLI entry point (commander); `analyze` is the default command
+  commands/analyze.ts       # Orchestrator: scan → parse → analyze → render → terminal report
+  scanner/                  # File discovery, language/framework detection, entry points (package.json, index.html)
+  parser/                   # JS/TS via TypeScript's pre-processor, Python resolver, regex parsers for other languages
+  graph/                    # Dependency graph, grouping
+  analyzer/
+    index.ts                # Runs every inspection, sorts, grades
+    issue-descriptions.ts   # Catalog: title, why, fix, city metaphor per problem type
+    hygiene.ts              # What's committed that shouldn't be / what's missing (uses `git ls-files`)
+    code-habits.ts          # Backup copies, duplicates, debugger, console logs, localhost, star imports, debug mode
+    security-scanner.ts     # Secrets, injection, XSS, weak hashing (on comment/string-masked code)
+    circular.ts, orphans.ts, coupling.ts, layer-detector.ts  # Graph-based checks
+    score.ts                # Grade A–F
+  renderer/
+    city/                   # The 8-bit city: layout.ts, build-model.ts, template.ts, client/ (browser code)
+    terminal.ts             # Terminal Inspector's Report
+    game-map/, interactive-html.ts, treemap/, svg/, mermaid/   # Legacy formats
+tests/                      # vitest; tests/helpers/fixture-repos.ts generates beginner and clean git repos
 ```
+
+Browser code in `src/renderer/city/client/` is inlined with `Function.prototype.toString()`. Keep those functions self-contained: no runtime imports, no module-level references. Never pass project-derived strings to a shell: use `execFileSync`/`spawn` with argument arrays.
