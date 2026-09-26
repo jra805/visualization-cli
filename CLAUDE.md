@@ -47,9 +47,7 @@ codescape --fail-on error      # exit 1 if anything is "fix now" (CI)
 | -------------- | ----------------------------------------- | ------------------------------------------------- |
 | City (default) | `codescape`                               | Exploring a project and fixing its problems       |
 | Mermaid        | `codescape --format mermaid -o ./docs`    | Embedding a diagram in GitHub/GitLab markdown     |
-| Interactive    | `codescape --format interactive`          | Legacy dependency graph (loads Cytoscape from a CDN) |
-| Game map       | `codescape --format game`                 | Legacy fantasy map                                |
-| Treemap / SVG  | `codescape --format treemap` / `svg`      | Legacy size and circle-packing views              |
+| Treemap / SVG  | `codescape --format treemap` / `svg`      | File sizes as a treemap or circle packing         |
 
 ## What the inspector reports
 
@@ -117,7 +115,7 @@ src/
   renderer/
     city/                   # The 8-bit city: layout.ts, build-model.ts, template.ts, client/ (browser code)
     terminal.ts             # Terminal Inspector's Report
-    game-map/, interactive-html.ts, treemap/, svg/, mermaid/   # Legacy formats
+    treemap/, svg/, mermaid/   # Other formats
 tests/                      # vitest; tests/helpers/fixture-repos.ts generates beginner and clean git repos
 ```
 

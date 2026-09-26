@@ -108,4 +108,4 @@ The JSON report lists every problem with its explanation, the affected files and
 
 ## Other formats
 
-`--format interactive | game | treemap | svg | mermaid` produce the earlier dependency-graph, fantasy-map, treemap, circle-packing and Mermaid outputs from the same analysis. `--group` and `--group-config` apply to those formats.
+`--format treemap | svg | mermaid` produce a treemap, a circle-packing SVG and Mermaid diagrams from the same analysis. `--group` and `--group-config` apply to those formats.

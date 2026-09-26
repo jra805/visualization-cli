@@ -107,7 +107,7 @@ codescape [dir] [options]
   --no-issues              Map only, no inspection
   --team                   Also check team history: single maintainer, stale files, hidden coupling
   -v, --verbose            List every problem in the terminal
-  --format <type>          city (default) | game | interactive | treemap | svg | mermaid
+  --format <type>          city (default) | treemap | svg | mermaid
 ```
 
 In CI, `codescape --no-open --fail-on error` fails the build when anything "fix now" appears. `--json` gives each problem with its explanation and fix commands.
@@ -137,7 +137,7 @@ Frameworks that deliberately do risky things score lower than apps do: Django `e
 
 ## Other formats
 
-The earlier formats are still available with `--format`: `interactive` (dependency graph), `game` (fantasy map), `treemap`, `svg` and `mermaid`. They use the same analysis.
+`--format mermaid` writes Mermaid diagrams you can paste into GitHub or GitLab markdown. `--format treemap` and `--format svg` show file sizes as a treemap and as circle packing. All three use the same analysis.
 
 ## Development
 

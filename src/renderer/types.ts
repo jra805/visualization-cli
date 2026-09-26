@@ -5,15 +5,11 @@ export interface RenderOptions {
   verbose?: boolean;
   format?: OutputFormat;
   targetDir?: string;
-  fresh?: boolean;
-  noPersist?: boolean;
 }
 
 export type OutputFormat =
   | "city"
   | "mermaid"
-  | "interactive"
   | "terminal"
-  | "game"
   | "treemap"
   | "svg";

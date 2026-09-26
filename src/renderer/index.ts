@@ -7,10 +7,6 @@ import type { ComponentInfo, ComponentDataFlow } from "../parser/types.js";
 import type { RenderOptions } from "./types.js";
 import { generateMermaidDiagrams } from "./mermaid/index.js";
 import { generateHtml } from "./html.js";
-import { generateInteractiveHtml } from "./interactive-html.js";
-import { generateGameMapHtml } from "./game-map/index.js";
-import type { MapState } from "./game-map/map-state.js";
-import { loadMapState, saveMapState } from "./game-map/map-state.js";
 import { generateTreemapHtml } from "./treemap/index.js";
 import { generateSvg } from "./svg/index.js";
 import { generateCityHtml } from "./city/index.js";
@@ -19,10 +15,8 @@ import { generateCityHtml } from "./city/index.js";
 export const DEFAULT_FILENAMES: Record<string, string> = {
   city: "city.html",
   mermaid: "architecture.html",
-  game: "game-map.html",
   treemap: "treemap.html",
   svg: "architecture.svg",
-  interactive: "interactive.html",
 };
 
 /** Check that an output directory doesn't contain source files before overwriting */
@@ -91,20 +85,12 @@ export async function render(
     const diagrams = generateMermaidDiagrams(graph, report, components, dataFlows);
     const html = generateHtml(diagrams, report);
     fs.writeFileSync(outputPath, html, "utf-8");
-  } else if (format === "game") {
-    const mapState = options.fresh ? null : loadMapState(options.targetDir ?? ".");
-    const { html, newState } = generateGameMapHtml(graph, report, components, dataFlows, mapState);
-    fs.writeFileSync(outputPath, html, "utf-8");
-    if (!options.noPersist) {
-      saveMapState(options.targetDir ?? ".", newState);
-    }
   } else if (format === "treemap") {
     fs.writeFileSync(outputPath, generateTreemapHtml(graph, report), "utf-8");
   } else if (format === "svg") {
     fs.writeFileSync(outputPath, generateSvg(graph, report), "utf-8");
   } else {
-    const html = generateInteractiveHtml(graph, report, components, dataFlows);
-    fs.writeFileSync(outputPath, html, "utf-8");
+    throw new Error(`Unknown format: ${format}`);
   }
 
   return outputPath;

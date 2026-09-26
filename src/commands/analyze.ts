@@ -33,8 +33,6 @@ export interface AnalyzeOptions {
   group?: boolean;
   groupConfig?: string;
   verbose?: boolean;
-  fresh?: boolean;
-  persist?: boolean;
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { error: 3, warning: 2, info: 1 };
@@ -143,8 +141,6 @@ export async function analyzeCommand(dir: string, options: AnalyzeOptions): Prom
           format,
           targetDir,
           projectName,
-          fresh: options.fresh,
-          noPersist: options.persist === false,
         },
       );
       renderSpinner.succeed(`Wrote ${chalk.cyan(outputPath)}`);
