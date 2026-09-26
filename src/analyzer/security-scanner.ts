@@ -310,7 +310,9 @@ export function detectSecurityIssues(graph: Graph, rootDir?: string): Issue[] {
 
     // If the file defines its own escape/sanitize helper, innerHTML is intentional
     const hasEscapeFunction =
-      /function\s+(?:esc|escHtml|escapeHtml|sanitize|escape|encode)\s*\(/.test(source);
+      /(?:function\s+|(?:const|let|var)\s+)(?:esc|escHtml|escapeHtml|sanitize|escape|encode)\s*(?:\(|=\s*(?:\([^)]*\)|\w+)\s*=>)/.test(
+        source,
+      );
 
     for (let i = 0; i < rawLines.length; i++) {
       const ctx: LineContext = {

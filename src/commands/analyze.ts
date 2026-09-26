@@ -1,13 +1,17 @@
 import ora from "ora";
 import chalk from "chalk";
+import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { scan } from "../scanner/index.js";
 import { parse } from "../parser/index.js";
 import { analyze } from "../analyzer/index.js";
-import { render } from "../renderer/index.js";
+import { render, openInBrowser } from "../renderer/index.js";
 import { createAnalysisContext } from "../analyzer/analysis-context.js";
-
+import { getIssueDescription } from "../analyzer/issue-descriptions.js";
+import { formatInspectorReport } from "../renderer/terminal.js";
 import type { OutputFormat } from "../renderer/types.js";
+import type { ArchReport, Severity } from "../analyzer/types.js";
 import { applyGrouping } from "../graph/auto-grouper.js";
 import { disambiguateLabels } from "../utils/paths.js";
 
@@ -21,6 +25,10 @@ export interface AnalyzeOptions {
   depth?: number;
   issues?: boolean;
   format?: OutputFormat;
+  open?: boolean;
+  json?: boolean;
+  failOn?: Severity;
+  team?: boolean;
   group?: boolean;
   groupConfig?: string;
   verbose?: boolean;
@@ -28,31 +36,37 @@ export interface AnalyzeOptions {
   persist?: boolean;
 }
 
-export async function analyzeCommand(
-  dir: string,
-  options: AnalyzeOptions,
-): Promise<void> {
-  const targetDir = path.resolve(dir);
-  const outputDir = path.resolve(options.output || targetDir);
-  const context = createAnalysisContext();
+const SEVERITY_RANK: Record<Severity, number> = { error: 3, warning: 2, info: 1 };
 
-  // Step 1: Scan
-  const scanSpinner = ora("Scanning project...").start();
+/**
+ * Results go to a per-project folder under the OS temp directory unless
+ * --output says otherwise: a tool that warns about committed junk shouldn't
+ * drop HTML files into the project it inspects.
+ */
+export function defaultOutputDir(targetDir: string): string {
+  const name = path.basename(targetDir).replace(/[^\w.-]+/g, "_") || "project";
+  const hash = crypto.createHash("sha1").update(targetDir).digest("hex").slice(0, 8);
+  return path.join(os.tmpdir(), "codescape", `${name}-${hash}`);
+}
+
+export async function analyzeCommand(dir: string, options: AnalyzeOptions): Promise<void> {
+  const targetDir = path.resolve(dir);
+  const projectName = path.basename(targetDir);
+  const format = options.format ?? "city";
+  const json = options.json === true;
+  const context = createAnalysisContext();
+  // Keep stdout clean for --json: progress goes nowhere
+  const spinner = (text: string) => ora({ text, isSilent: json }).start();
+
+  const scanSpinner = spinner("Surveying the land...");
   let scanResult;
   try {
-    scanResult = await scan(targetDir, {
-      focus: options.focus,
-      depth: options.depth,
-    });
+    scanResult = await scan(targetDir, { focus: options.focus, depth: options.depth });
     const langSummary =
       scanResult.languages.length > 0
-        ? scanResult.languages
-            .map((l) => `${l.language}(${l.fileCount})`)
-            .join(", ")
+        ? scanResult.languages.map((l) => `${l.language}(${l.fileCount})`).join(", ")
         : "unknown";
-    scanSpinner.succeed(
-      `Found ${scanResult.files.length} files [${langSummary}] (${scanResult.framework}${scanResult.hasTypeScript ? " + TypeScript" : ""})`,
-    );
+    scanSpinner.succeed(`Found ${scanResult.files.length} source files [${langSummary}]`);
   } catch (error) {
     scanSpinner.fail("Scan failed");
     console.error(chalk.red((error as Error).message));
@@ -60,33 +74,24 @@ export async function analyzeCommand(
   }
 
   if (scanResult.files.length === 0) {
-    console.log(
-      chalk.yellow("No source files found. Is this a supported project?"),
-    );
-    process.exit(0);
+    console.error(chalk.yellow("No source files found. Is this the right folder?"));
+    process.exit(json ? 1 : 0);
   }
 
-  // Step 2: Parse
-  const parseSpinner = ora("Parsing dependencies and components...").start();
+  const parseSpinner = spinner("Laying out streets...");
   let parseResult;
   try {
     parseResult = await parse(scanResult, context);
-    parseSpinner.succeed(
-      `Parsed ${parseResult.graph.nodes.size} modules, ${parseResult.parseResult.components.length} components`,
-    );
+    parseSpinner.succeed(`Mapped ${parseResult.graph.nodes.size} buildings and ${parseResult.graph.edges.length} roads`);
   } catch (error) {
     parseSpinner.fail("Parse failed");
-    if (options.verbose) {
-      console.error(chalk.red((error as Error).message));
-    }
+    console.error(chalk.red((error as Error).message));
     process.exit(1);
   }
 
-  // Disambiguate duplicate labels (e.g., multiple "page" or "route" files)
   disambiguateLabels(parseResult.graph.nodes);
 
-  // Step 3: Analyze
-  const analyzeSpinner = ora("Analyzing architecture...").start();
+  const inspectSpinner = spinner("Inspecting the city...");
   const report = await analyze(
     parseResult.graph,
     parseResult.circularDeps,
@@ -98,109 +103,95 @@ export async function analyzeCommand(
       context,
       frameworks: scanResult.frameworks,
       cycleGroups: parseResult.cycleGroups,
+      teamInsights: options.team === true,
     },
   );
-  analyzeSpinner.succeed(
-    `Analysis complete: ${report.issues.length} issues found`,
-  );
+  inspectSpinner.succeed(`Inspection complete: ${report.issues.length} problem${report.issues.length === 1 ? "" : "s"}`);
 
-  // Step 3.5: Optional grouping
-  const groupedGraph = applyGrouping(parseResult.graph, {
-    group: options.group,
-    groupConfig: options.groupConfig,
-  });
-  if (groupedGraph) {
-    const groupCount = groupedGraph.groups.size;
-    const groupedNodeCount = groupedGraph.nodeMembership.size;
-    console.log(
-      chalk.dim(
-        `  Grouped ${groupedNodeCount} modules into ${groupCount} groups`,
-      ),
-    );
-  }
+  // Grouping only applies to the legacy graph formats; the city is always per file
+  const groupedGraph =
+    format === "city" ? null : applyGrouping(parseResult.graph, { group: options.group, groupConfig: options.groupConfig });
 
-  // Step 4: Render
-  const renderGraph = groupedGraph ?? parseResult.graph;
-  const renderSpinner = ora("Generating diagrams...").start();
-  try {
-    await render(
-      renderGraph,
-      report,
-      parseResult.parseResult.components,
-      parseResult.parseResult.dataFlows,
-      {
-        outputDir,
-        verbose: options.verbose,
-        format: options.format,
-        targetDir,
-        fresh: options.fresh,
-        noPersist: options.persist === false,
-      },
-    );
-    const ext = path.extname(outputDir).toLowerCase();
-    const isFilePath = [".html", ".svg", ".htm"].includes(ext);
-    const displayPath = isFilePath
-      ? outputDir
-      : outputDir +
-        path.sep +
-        (options.format === "mermaid"
-          ? "architecture.html"
-          : options.format === "game"
-            ? "game-map.html"
-            : options.format === "treemap"
-              ? "treemap.html"
-              : options.format === "svg"
-                ? "architecture.svg"
-                : "interactive.html");
-    renderSpinner.succeed(
-      `Visualization opened in browser → ${chalk.cyan(displayPath)}`,
-    );
-  } catch (error) {
-    renderSpinner.fail("Render failed");
-    console.error(chalk.red((error as Error).message));
-    process.exit(1);
-  }
-
-  // Summary
-  console.log("");
-  console.log(chalk.bold("  Analysis Summary"));
-  console.log(chalk.dim("  ────────────────────────────────────"));
-
-  const langNames = scanResult.languages.map((l) => l.language);
-  console.log(
-    `  Files: ${scanResult.files.length} across ${langNames.length} language${langNames.length !== 1 ? "s" : ""} (${langNames.join(", ")})`,
-  );
-
-  if (report.architecturePattern && report.architecturePattern !== "unknown") {
-    console.log(`  Architecture: ${report.architecturePattern}`);
-  }
-
-  if (report.issues.length > 0) {
-    const errors = report.issues.filter((i) => i.severity === "error").length;
-    const warnings = report.issues.filter(
-      (i) => i.severity === "warning",
-    ).length;
-    const infos = report.issues.filter((i) => i.severity === "info").length;
-    const parts: string[] = [];
-    if (errors > 0)
-      parts.push(chalk.red(`${errors} error${errors !== 1 ? "s" : ""}`));
-    if (warnings > 0)
-      parts.push(
-        chalk.yellow(`${warnings} warning${warnings !== 1 ? "s" : ""}`),
+  let outputPath: string | null = null;
+  if (!json || options.output) {
+    const renderSpinner = spinner(format === "city" ? "Building the city..." : "Drawing the map...");
+    try {
+      outputPath = await render(
+        groupedGraph ?? parseResult.graph,
+        report,
+        parseResult.parseResult.components,
+        parseResult.parseResult.dataFlows,
+        {
+          outputDir: options.output ? path.resolve(options.output) : defaultOutputDir(targetDir),
+          verbose: options.verbose,
+          format,
+          targetDir,
+          projectName,
+          fresh: options.fresh,
+          noPersist: options.persist === false,
+        },
       );
-    if (infos > 0) parts.push(chalk.blue(`${infos} info`));
-    console.log(`  Issues: ${parts.join(chalk.dim(" · "))}`);
-  } else {
-    console.log(chalk.green("  Issues: none found"));
-  }
-
-  // Warnings from analysis context
-  if (context.warnings.length > 0) {
-    console.log("");
-    for (const w of context.warnings) {
-      console.log(chalk.yellow(`  Warning: ${w.message}`));
+      renderSpinner.succeed(`Wrote ${chalk.cyan(outputPath)}`);
+    } catch (error) {
+      renderSpinner.fail("Render failed");
+      console.error(chalk.red((error as Error).message));
+      process.exit(1);
     }
   }
 
-  console.log("");
+  if (json) {
+    process.stdout.write(JSON.stringify(jsonReport(report, projectName, targetDir, scanResult.languages.map((l) => l.language), parseResult.graph.nodes.size, outputPath), null, 2) + "\n");
+  } else {
+    console.log(
+      formatInspectorReport(report, {
+        name: projectName,
+        buildings: parseResult.graph.nodes.size,
+        verbose: options.verbose,
+      }),
+    );
+    for (const w of context.warnings) console.log(chalk.yellow(`  Note: ${w.message}`));
+    if (outputPath) {
+      const opened = options.open !== false && openInBrowser(outputPath);
+      console.log(`  ${opened ? "Opening your city" : "Your city"} → ${chalk.cyan(outputPath)}`);
+      console.log("");
+    }
+  }
+
+  if (options.failOn) {
+    const threshold = SEVERITY_RANK[options.failOn];
+    if (report.issues.some((i) => SEVERITY_RANK[i.severity] >= threshold)) process.exitCode = 1;
+  }
+}
+
+/** Machine-readable report for CI, graders and scripts. */
+export function jsonReport(
+  report: ArchReport,
+  name: string,
+  targetDir: string,
+  languages: string[],
+  files: number,
+  outputPath: string | null,
+) {
+  return {
+    name,
+    path: targetDir,
+    grade: report.grade,
+    stats: { files, edges: report.totalEdges, languages },
+    issues: report.issues.map((issue) => {
+      const desc = getIssueDescription(issue.type);
+      return {
+        type: issue.type,
+        severity: issue.severity,
+        title: desc.title,
+        message: issue.message,
+        files: issue.files,
+        ...(issue.line ? { line: issue.line } : {}),
+        ...(issue.evidence ? { evidence: issue.evidence } : {}),
+        ...(issue.commands ? { commands: issue.commands } : {}),
+        explanation: desc.explanation,
+        suggestion: desc.suggestion,
+      };
+    }),
+    output: outputPath,
+  };
 }
