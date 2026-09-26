@@ -7,10 +7,12 @@
     "codescape": "./dist/index.js"
   },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "files": [
     "dist",
@@ -38,7 +40,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jra805/visualization-cli.git"
+    "url": "git+https://github.com/jra805/visualization-cli.git"
   },
   "homepage": "https://github.com/jra805/visualization-cli",
   "bugs": {
